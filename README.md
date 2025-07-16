@@ -107,10 +107,10 @@ Coredog is licensed under the [MIT License](LICENSE).
 <table>
 <tr>
     <td align="center">
-        <a href="https://github.com/DomineCore">
-            <img src="https://avatars.githubusercontent.com/u/50765823?v=4" width="100;" alt="DomineCore"/>
+        <a href="https://github.com/yafeiaa">
+            <img src="https://avatars.githubusercontent.com/u/50765823?v=4" width="100;" alt="yafeiaa"/>
             <br />
-            <sub><b>Core</b></sub>
+            <sub><b>Yafeiaa</b></sub>
         </a>
     </td>
     <td align="center">
