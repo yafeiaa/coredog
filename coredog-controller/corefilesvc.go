@@ -20,6 +20,10 @@ func (s *CorefileService) Sub(ctx context.Context, r *pb.Corefile) (*pb.Corefile
 	for _, noticeChan := range cfg.NoticeChannel {
 		corefilePath, corefilename := filepath.Split(r.Filepath)
 		msg := buildMessage(cfg.MessageTemplate, corefilePath, corefilename, cfg.MessageLabels, r.Url)
+		// 如果noticeChan.Keyword不为空，则当文件中包含该关键字时，发送到该channel，其他情况不发送到该channel
+		if noticeChan.Keyword != "" && !strings.Contains(r.Filepath, noticeChan.Keyword) {
+			continue
+		}
 		if noticeChan.Chan == "wechat" {
 			c := notice.NewWechatWebhookMsg(noticeChan.Webhookurl)
 			c.Notice(msg)
