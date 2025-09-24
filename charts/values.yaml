@@ -1,38 +1,30 @@
-fullnameOverride: coredog
-nameOverride: coredog
-
 image:
   repository: coderflyfyf/coredog
   tag: v0.0.3.rc
+  pullPolicy: IfNotPresent
 
 config:
-  watcher.yaml: |-
+  coredog: |-
     StorageConfig:
       enabled: true
       protocol: s3
-      s3AccesskeyID: "s3AccesskeyID"
-      s3SecretAccessKey: "s3SecretAccessKey"
-      s3Region: "ap-nanjing"
-      S3Bucket: "bucket"
-      S3Endpoint: "endpoint"
+      s3AccesskeyID: ""
+      s3SecretAccessKey: ""
+      s3Region: ""
+      S3Bucket: ""
+      S3Endpoint: ""
       StoreDir: corefiles
       PresignedURLExpireSeconds: 3600
       DeleteLocalCorefile: true
-
-  controller.yaml: |-
-    NoticeChannel:
-    - chan: slack
-      webhookurl: "url"
-    - chan: wechat
-      webhookurl: "url"
-
-controller:
-  resources: {}
-  service:
-    grpcPort: 8443
+    gc: false
+    gc_type: rm
+    CorefileDir: /corefile
+    messageTemplate: "[{pod.namespace}/{pod.name}] core: {corefile.filename} on {pod.node} -> {corefile.url}"
+    messageLabels: {}
+    NoticeChannel: []
 
 watcher:
-  resources: {}
+  kubeLookup: true
 
 corefileVolume:
   type: hostPath
@@ -40,6 +32,3 @@ corefileVolume:
   hostPath:
     path: /root/core
     type: Directory
-  emptyDir: {}
-  persistentVolumeClaim:
-    claimName: my-pvc
