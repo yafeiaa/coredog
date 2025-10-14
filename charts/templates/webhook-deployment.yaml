@@ -1,0 +1,64 @@
+{{- if .Values.webhook.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "coredog.fullname" . }}-webhook
+  labels:
+    {{- include "coredog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: webhook
+spec:
+  replicas: {{ .Values.webhook.replicas }}
+  selector:
+    matchLabels:
+      {{- include "coredog.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: webhook
+  template:
+    metadata:
+      labels:
+        {{- include "coredog.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: webhook
+    spec:
+      serviceAccountName: {{ include "coredog.fullname" . }}
+      containers:
+      - name: webhook
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        args: ["webhook"]
+        ports:
+        - containerPort: 8443
+          name: webhook
+          protocol: TCP
+        env:
+        - name: CONFIG_PATH
+          value: "/etc/config/coredog.yaml"
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/config
+        - name: webhook-certs
+          mountPath: /etc/webhook/certs
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          {{- toYaml .Values.webhook.resources | nindent 10 }}
+      volumes:
+      - name: config-volume
+        configMap:
+          name: {{ include "coredog.fullname" . }}
+      - name: webhook-certs
+        secret:
+          secretName: {{ include "coredog.fullname" . }}-webhook-certs
+{{- end }}
+

@@ -79,11 +79,26 @@ func Run() {
 			logrus.Errorf("store a corefile error:%v", err)
 			continue
 		}
-		if wcfg.Gc && wcfg.GcType == "rm" {
-			_ = os.Remove(corefilePath)
-		} else if wcfg.Gc && wcfg.GcType == "truncate" {
-			_ = os.Truncate(corefilePath, 0)
+
+		// 上传成功后，根据配置清理本地文件
+		if wcfg.StorageConfig.DeleteLocalCorefile {
+			if wcfg.Gc && wcfg.GcType == "truncate" {
+				// 如果明确配置了 truncate，则清空文件而不是删除
+				if err := os.Truncate(corefilePath, 0); err != nil {
+					logrus.Errorf("failed to truncate corefile %s: %v", corefilePath, err)
+				} else {
+					logrus.Infof("truncated local corefile: %s", corefilePath)
+				}
+			} else {
+				// 默认删除文件
+				if err := os.Remove(corefilePath); err != nil {
+					logrus.Errorf("failed to remove corefile %s: %v", corefilePath, err)
+				} else {
+					logrus.Infof("deleted local corefile: %s", corefilePath)
+				}
+			}
 		}
+
 		pod := podresolver.Resolve(corefilePath, strings.ToLower(strings.TrimSpace(os.Getenv("KUBE_LOOKUP"))) == "true")
 		notify(ccfg, corefilePath, url, pod)
 	}

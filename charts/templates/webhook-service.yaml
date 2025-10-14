@@ -1,0 +1,20 @@
+{{- if .Values.webhook.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "coredog.fullname" . }}-webhook
+  labels:
+    {{- include "coredog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: webhook
+spec:
+  type: ClusterIP
+  ports:
+  - port: 443
+    targetPort: 8443
+    protocol: TCP
+    name: webhook
+  selector:
+    {{- include "coredog.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: webhook
+{{- end }}
+

@@ -4,3 +4,4 @@ __debug_bin*
 local_config/*
 .vscode/*
 charts/values-local.yaml
+values.yaml

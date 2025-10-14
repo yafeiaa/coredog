@@ -1,0 +1,31 @@
+{{- if .Values.webhook.enabled }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "coredog.fullname" . }}
+  labels:
+    {{- include "coredog.labels" . | nindent 4 }}
+webhooks:
+- name: pod-inject.coredog.io
+  admissionReviewVersions: ["v1", "v1beta1"]
+  clientConfig:
+    service:
+      name: {{ include "coredog.fullname" . }}-webhook
+      namespace: {{ .Release.Namespace }}
+      path: "/mutate"
+    caBundle: {{ .Files.Get "webhook-certs/tls.crt" | b64enc }}
+  rules:
+  - operations: ["CREATE"]
+    apiGroups: [""]
+    apiVersions: ["v1"]
+    resources: ["pods"]
+  failurePolicy: {{ .Values.webhook.failurePolicy }}
+  matchPolicy: Equivalent
+  {{- if .Values.webhook.namespaceSelector }}
+  namespaceSelector:
+    {{- toYaml .Values.webhook.namespaceSelector | nindent 4 }}
+  {{- end }}
+  sideEffects: None
+  timeoutSeconds: 10
+{{- end }}
+
