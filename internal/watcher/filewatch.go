@@ -91,8 +91,24 @@ func (fw *FileWatcher) watchEvents() {
 					} else {
 						if file.IsDir() {
 							if ev.Op&fsnotify.Create == fsnotify.Create {
+								// 添加监听
 								fw.watch.Add(ev.Name)
 								logrus.Infof("new subdir created,start to watch it:%s", ev.Name)
+
+								// 递归监听子目录中的所有子目录
+								filepath.Walk(ev.Name, func(path string, info os.FileInfo, err error) error {
+									if err != nil {
+										return nil
+									}
+									if info.IsDir() && path != ev.Name {
+										if err := fw.watch.Add(path); err != nil {
+											logrus.Errorf("failed to watch subdir %s: %v", path, err)
+										} else {
+											logrus.Infof("recursively watching subdir: %s", path)
+										}
+									}
+									return nil
+								})
 							}
 						} else {
 							// Check if we've already processed this file

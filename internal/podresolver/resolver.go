@@ -22,34 +22,32 @@ type PodInfo struct {
 }
 
 // Resolve extracts pod info from corefile path injected by webhook
-// Webhook injects volumes with hostPath: /data/coredog-system/dumps/<namespace>/<podname>/
-// Mounted to container at: /corefile (or custom path)
-// Core dump file: /corefile/core.xxx (container view)
-// Watcher sees: /corefile/core.xxx (because watcher mounts the parent hostPath)
-//
-// Wait, watcher needs to see the full path structure to parse namespace/podname!
-// So watcher should mount: /data/coredog-system/dumps -> /corefile
-// Then it will see: /corefile/<namespace>/<podname>/core.xxx
+// Webhook injects: /data/coredog-system/dumps/<namespace>/<pod-uid>/
+// Watcher mounts: /data/coredog-system/dumps -> /corefile
+// So watcher sees: /corefile/<namespace>/<pod-uid>/core.xxx
 func Resolve(corefilePath string, enableLookup bool) PodInfo {
 	info := PodInfo{Node: strings.TrimSpace(os.Getenv("NODE_NAME"))}
 
 	logrus.Debugf("resolving pod info from corefile: %s", corefilePath)
 
 	// Primary strategy: Extract from webhook-injected path pattern
-	// Pattern: /corefile/<namespace>/<podname>/... (watcher's view)
-	pathRegexp := regexp.MustCompile(`/corefile/([^/]+)/([^/]+)/`)
+	// Pattern: /corefile/<namespace>/<pod-uid>/...
+	pathRegexp := regexp.MustCompile(`/corefile/([^/]+)/([0-9a-f-]{36})/`)
 	if matches := pathRegexp.FindStringSubmatch(corefilePath); len(matches) == 3 {
 		info.Namespace = matches[1]
-		info.Name = matches[2]
-		logrus.Infof("resolved pod from webhook path: %s/%s", info.Namespace, info.Name)
+		info.UID = matches[2]
 
-		// Optionally get UID via K8s API
+		// 通过 K8s API 查询 Pod 名称
 		if enableLookup {
-			if uid, ok := lookupUIDByName(info.Namespace, info.Name); ok {
-				info.UID = uid
-				logrus.Debugf("enriched pod UID via K8s API: %s", info.UID)
+			if podName, ok := lookupNameByUID(info.Namespace, info.UID); ok {
+				info.Name = podName
+				logrus.Infof("resolved pod from webhook path: %s/%s (uid: %s)", info.Namespace, info.Name, info.UID)
+				return info
 			}
 		}
+
+		// 如果 lookup 失败，只有 UID
+		logrus.Warnf("resolved pod UID %s from path, but failed to get name", info.UID)
 		return info
 	}
 
@@ -64,6 +62,35 @@ func Resolve(corefilePath string, enableLookup bool) PodInfo {
 
 	logrus.Warnf("failed to resolve pod info for corefile: %s", corefilePath)
 	return info
+}
+
+// lookupNameByUID gets Pod name from K8s API by namespace and UID
+func lookupNameByUID(namespace, uid string) (name string, ok bool) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		logrus.Debugf("failed to get in-cluster config: %v", err)
+		return "", false
+	}
+
+	cli, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		logrus.Debugf("failed to create k8s client: %v", err)
+		return "", false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	pod, err := cli.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		FieldSelector: "metadata.uid=" + uid,
+		Limit:         1,
+	})
+	if err != nil || len(pod.Items) == 0 {
+		logrus.Debugf("failed to find pod by UID %s in namespace %s: %v", uid, namespace, err)
+		return "", false
+	}
+
+	return pod.Items[0].Name, true
 }
 
 // lookupUIDByName gets Pod UID from K8s API by namespace and name

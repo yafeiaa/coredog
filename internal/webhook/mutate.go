@@ -144,7 +144,7 @@ func (h *MutateHandler) mutatePods(ar *admissionv1.AdmissionReview) *admissionv1
 	}
 
 	// 生成 patch
-	patches := h.createPatch(&pod, req.Namespace)
+	patches := h.createPatch(&pod, req)
 	if len(patches) == 0 {
 		return &admissionv1.AdmissionResponse{
 			Allowed: true,
@@ -233,14 +233,8 @@ func (h *MutateHandler) getTargetContainers(pod *corev1.Pod) map[string]bool {
 	return targetMap
 }
 
-func (h *MutateHandler) createPatch(pod *corev1.Pod, namespace string) []map[string]interface{} {
+func (h *MutateHandler) createPatch(pod *corev1.Pod, req *admissionv1.AdmissionRequest) []map[string]interface{} {
 	var patches []map[string]interface{}
-
-	// 获取配置
-	podName := pod.Name
-	if podName == "" && pod.GenerateName != "" {
-		podName = pod.GenerateName + "XXXXX"
-	}
 
 	// 获取 core dump 路径配置（必填，已在 shouldInject 中验证）
 	mountPath := strings.TrimSpace(pod.Annotations[CoredogAnnotationPath])
@@ -248,8 +242,11 @@ func (h *MutateHandler) createPatch(pod *corev1.Pod, namespace string) []map[str
 	// 获取要注入的容器列表
 	targetContainers := h.getTargetContainers(pod)
 
-	// 构建 hostPath: /data/coredog-system/dumps/<namespace>/<podname>/
-	hostPath := fmt.Sprintf("%s/%s/%s", h.PathBase, namespace, podName)
+	// 使用 Pod UID 作为唯一标识（100% 可靠，永不重复）
+	podUID := string(req.UID)
+
+	// 构建 hostPath: /data/coredog-system/dumps/<namespace>/<pod-uid>/
+	hostPath := fmt.Sprintf("%s/%s/%s", h.PathBase, req.Namespace, podUID)
 
 	// 检查是否已经存在该 volume
 	volumeExists := false
