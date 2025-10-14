@@ -25,7 +25,16 @@ func buildNotifyMessage(cfg *cfgpkg.Config, corefilePath, url string, pod podres
 	msg = strings.ReplaceAll(msg, "{corefile.path}", corefilePath)
 	msg = strings.ReplaceAll(msg, "{corefile.filename}", filename)
 	msg = strings.ReplaceAll(msg, "{corefile.url}", url)
-	msg = strings.ReplaceAll(msg, "{pod.name}", pod.Name)
+
+	// 如果 Pod 名称为空，使用 UID 或 "unknown"
+	podName := pod.Name
+	if podName == "" && pod.UID != "" {
+		podName = "pod-" + pod.UID[:8] + "..." // 显示 UID 前8位
+	} else if podName == "" {
+		podName = "unknown"
+	}
+
+	msg = strings.ReplaceAll(msg, "{pod.name}", podName)
 	msg = strings.ReplaceAll(msg, "{pod.namespace}", pod.Namespace)
 	msg = strings.ReplaceAll(msg, "{pod.uid}", pod.UID)
 	msg = strings.ReplaceAll(msg, "{pod.node}", pod.Node)

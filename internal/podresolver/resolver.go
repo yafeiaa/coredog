@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -20,6 +21,14 @@ type PodInfo struct {
 	UID       string
 	Node      string
 }
+
+// 缓存 UID -> Name 映射，避免重复查询
+var (
+	uidToNameCache = make(map[string]string)
+	cacheMutex     sync.RWMutex
+	cacheTTL       = 5 * time.Minute
+	cacheExpiry    = make(map[string]time.Time)
+)
 
 // Resolve extracts pod info from corefile path injected by webhook
 // Webhook injects: /data/coredog-system/dumps/<namespace>/<pod-uid>/
@@ -65,8 +74,21 @@ func Resolve(corefilePath string, enableLookup bool) PodInfo {
 }
 
 // lookupNameByUID gets Pod name from K8s API by namespace and UID
-// 使用 client-go 的 metadata client 直接通过 UID 查询（高性能）
+// 带缓存，避免重复查询
 func lookupNameByUID(namespace, uid string) (name string, ok bool) {
+	cacheKey := namespace + "/" + uid
+
+	// 检查缓存
+	cacheMutex.RLock()
+	if cachedName, exists := uidToNameCache[cacheKey]; exists {
+		if expiry, hasExpiry := cacheExpiry[cacheKey]; hasExpiry && time.Now().Before(expiry) {
+			cacheMutex.RUnlock()
+			logrus.Debugf("found pod in cache: %s/%s (uid: %s)", namespace, cachedName, uid)
+			return cachedName, true
+		}
+	}
+	cacheMutex.RUnlock()
+
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		logrus.Errorf("failed to get in-cluster config: %v", err)
@@ -82,14 +104,10 @@ func lookupNameByUID(namespace, uid string) (name string, ok bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	// 使用 FieldSelector 直接查询（性能最优）
-	// 注意：metadata.uid 字段选择器在某些 Kubernetes 版本可能不支持
-	// 如果不支持，回退到 List + 过滤（但加上节点过滤减少范围）
+	// 限制在当前节点，大幅减少查询范围
 	nodeName := strings.TrimSpace(os.Getenv("NODE_NAME"))
-
 	var fieldSelector string
 	if nodeName != "" {
-		// 限制在当前节点，大幅减少查询范围
 		fieldSelector = "spec.nodeName=" + nodeName
 	}
 
@@ -101,15 +119,23 @@ func lookupNameByUID(namespace, uid string) (name string, ok bool) {
 		return "", false
 	}
 
-	// 遍历查找匹配的 UID（仅查询当前节点的 Pod，数量很少）
+	// 遍历查找匹配的 UID
 	for _, pod := range podList.Items {
 		if string(pod.UID) == uid {
-			logrus.Infof("found pod by UID: %s/%s (uid: %s)", namespace, pod.Name, uid)
-			return pod.Name, true
+			podName := pod.Name
+
+			// 更新缓存
+			cacheMutex.Lock()
+			uidToNameCache[cacheKey] = podName
+			cacheExpiry[cacheKey] = time.Now().Add(cacheTTL)
+			cacheMutex.Unlock()
+
+			logrus.Infof("found pod by UID: %s/%s (uid: %s)", namespace, podName, uid)
+			return podName, true
 		}
 	}
 
-	logrus.Warnf("pod with UID %s not found in namespace %s on node %s (searched %d pods)",
+	logrus.Warnf("pod with UID %s not found in namespace %s on node %s (searched %d pods, pod may have been deleted)",
 		uid, namespace, nodeName, len(podList.Items))
 	return "", false
 }

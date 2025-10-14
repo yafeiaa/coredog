@@ -243,7 +243,13 @@ func (h *MutateHandler) createPatch(pod *corev1.Pod, req *admissionv1.AdmissionR
 	targetContainers := h.getTargetContainers(pod)
 
 	// 使用 Pod UID 作为唯一标识（100% 可靠，永不重复）
-	podUID := string(req.UID)
+	// 注意：必须使用 pod.UID，不是 req.UID（req.UID 是 AdmissionRequest 的 UID）
+	podUID := string(pod.UID)
+	if podUID == "" {
+		// 在极少数情况下 UID 可能还未分配，使用 req.UID 作为后备
+		podUID = string(req.UID)
+		logrus.Warnf("pod.UID is empty for %s/%s, using req.UID: %s", req.Namespace, pod.Name, podUID)
+	}
 
 	// 构建 hostPath: /data/coredog-system/dumps/<namespace>/<pod-uid>/
 	hostPath := fmt.Sprintf("%s/%s/%s", h.PathBase, req.Namespace, podUID)
