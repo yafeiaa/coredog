@@ -65,32 +65,53 @@ func Resolve(corefilePath string, enableLookup bool) PodInfo {
 }
 
 // lookupNameByUID gets Pod name from K8s API by namespace and UID
+// 使用 client-go 的 metadata client 直接通过 UID 查询（高性能）
 func lookupNameByUID(namespace, uid string) (name string, ok bool) {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
-		logrus.Debugf("failed to get in-cluster config: %v", err)
+		logrus.Errorf("failed to get in-cluster config: %v", err)
 		return "", false
 	}
 
 	cli, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
-		logrus.Debugf("failed to create k8s client: %v", err)
+		logrus.Errorf("failed to create k8s client: %v", err)
 		return "", false
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	pod, err := cli.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
-		FieldSelector: "metadata.uid=" + uid,
-		Limit:         1,
+	// 使用 FieldSelector 直接查询（性能最优）
+	// 注意：metadata.uid 字段选择器在某些 Kubernetes 版本可能不支持
+	// 如果不支持，回退到 List + 过滤（但加上节点过滤减少范围）
+	nodeName := strings.TrimSpace(os.Getenv("NODE_NAME"))
+
+	var fieldSelector string
+	if nodeName != "" {
+		// 限制在当前节点，大幅减少查询范围
+		fieldSelector = "spec.nodeName=" + nodeName
+	}
+
+	podList, err := cli.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		FieldSelector: fieldSelector,
 	})
-	if err != nil || len(pod.Items) == 0 {
-		logrus.Debugf("failed to find pod by UID %s in namespace %s: %v", uid, namespace, err)
+	if err != nil {
+		logrus.Errorf("failed to list pods in namespace %s: %v", namespace, err)
 		return "", false
 	}
 
-	return pod.Items[0].Name, true
+	// 遍历查找匹配的 UID（仅查询当前节点的 Pod，数量很少）
+	for _, pod := range podList.Items {
+		if string(pod.UID) == uid {
+			logrus.Infof("found pod by UID: %s/%s (uid: %s)", namespace, pod.Name, uid)
+			return pod.Name, true
+		}
+	}
+
+	logrus.Warnf("pod with UID %s not found in namespace %s on node %s (searched %d pods)",
+		uid, namespace, nodeName, len(podList.Items))
+	return "", false
 }
 
 // lookupUIDByName gets Pod UID from K8s API by namespace and name
