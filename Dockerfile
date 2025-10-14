@@ -5,8 +5,22 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /coredog cmd/main.go
 
-FROM gcr.io/distroless/static:nonroot
+FROM alpine:3.19
 WORKDIR /
+# Install debugging tools
+RUN apk add --no-cache \
+    bash \
+    curl \
+    wget \
+    netcat-openbsd \
+    busybox-extras \
+    vim \
+    tree \
+    strace \
+    tcpdump \
+    ca-certificates \
+    && rm -rf /var/cache/apk/*
+
 COPY --from=builder /coredog /coredog
-USER nonroot:nonroot
+
 ENTRYPOINT ["/coredog"]
