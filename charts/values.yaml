@@ -7,7 +7,7 @@
 # ----------------------------------------------------------------------------
 image:
   repository: coderflyfyf/coredog
-  tag: v0.1.3
+  tag: v1.0.7
   pullPolicy: IfNotPresent
 
 # ----------------------------------------------------------------------------
@@ -43,8 +43,14 @@ config:
     # Core dump 文件目录（容器内路径，无需修改）
     CorefileDir: /corefile
     
-    # ⚠️ 通知配置：Core dump 发生时的消息模板
-    messageTemplate: "[{pod.namespace}/{pod.name}] core: {corefile.filename} on {pod.node} -> {corefile.url}"
+    # ⚠️ 通知配置：Core dump 发生时的消息模板（支持 Markdown 格式）
+    messageTemplate: |
+      🚨 **应用崩溃告警**
+      
+      📦 Namespace: `{pod.namespace}`
+      🏷️  Pod: `{pod.name}`
+      🖥️  Node: `{pod.node}`
+      📥 下载: {corefile.url}
     
     # 可选：自定义消息标签
     messageLabels: {}

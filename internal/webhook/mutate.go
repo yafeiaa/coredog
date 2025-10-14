@@ -161,7 +161,7 @@ func (h *MutateHandler) mutatePods(ar *admissionv1.AdmissionReview) *admissionv1
 		}
 	}
 
-	logrus.Infof("Injecting corefile volume for pod %s/%s", req.Namespace, pod.Name)
+	logrus.Infof("Injecting corefile volume for pod %s/%s (admission-uid: %s)", req.Namespace, pod.Name, req.UID)
 
 	return &admissionv1.AdmissionResponse{
 		Allowed: true,
@@ -242,17 +242,22 @@ func (h *MutateHandler) createPatch(pod *corev1.Pod, req *admissionv1.AdmissionR
 	// 获取要注入的容器列表
 	targetContainers := h.getTargetContainers(pod)
 
-	// 使用 Pod UID 作为唯一标识（100% 可靠，永不重复）
-	// 注意：必须使用 pod.UID，不是 req.UID（req.UID 是 AdmissionRequest 的 UID）
-	podUID := string(pod.UID)
-	if podUID == "" {
-		// 在极少数情况下 UID 可能还未分配，使用 req.UID 作为后备
-		podUID = string(req.UID)
-		logrus.Warnf("pod.UID is empty for %s/%s, using req.UID: %s", req.Namespace, pod.Name, podUID)
-	}
+	// 构建唯一标识符
+	// 问题：在 Webhook CREATE 阶段，pod.UID 是空的（由 API Server 稍后分配）
+	// 解决：使用 req.UID（AdmissionRequest 的 UID），它是唯一的
+	identifier := string(req.UID)
 
-	// 构建 hostPath: /data/coredog-system/dumps/<namespace>/<pod-uid>/
-	hostPath := fmt.Sprintf("%s/%s/%s", h.PathBase, req.Namespace, podUID)
+	logrus.Infof("Using identifier for pod %s/%s: %s", req.Namespace, pod.Name, identifier)
+
+	// 构建 hostPath: /data/coredog-system/dumps/<namespace>/<admission-uid>/
+	hostPath := fmt.Sprintf("%s/%s/%s", h.PathBase, req.Namespace, identifier)
+
+	// 添加 annotation 存储 admission UID（用于后续通过路径反查 Pod）
+	patches = append(patches, map[string]interface{}{
+		"op":    "add",
+		"path":  "/metadata/annotations/coredog.io~1admission-uid",
+		"value": identifier,
+	})
 
 	// 检查是否已经存在该 volume
 	volumeExists := false
