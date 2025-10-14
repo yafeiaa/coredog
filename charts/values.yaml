@@ -1,6 +1,6 @@
 image:
   repository: coderflyfyf/coredog
-  tag: v0.0.3.rc
+  tag: v0.1.1
   pullPolicy: IfNotPresent
 
 config:
@@ -31,4 +31,4 @@ corefileVolume:
   name: corefile
   hostPath:
     path: /root/core
-    type: Directory
+    type: DirectoryOrCreate

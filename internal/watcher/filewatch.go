@@ -14,14 +14,16 @@ import (
 )
 
 type FileWatcher struct {
-	watch    *fsnotify.Watcher
-	receiver chan string
+	watch          *fsnotify.Watcher
+	receiver       chan string
+	processedFiles map[string]bool // Track processed files to avoid duplicates
 }
 
 func NewFileWatcher(recevier chan string) *FileWatcher {
 	w := new(FileWatcher)
 	w.watch, _ = fsnotify.NewWatcher()
 	w.receiver = recevier
+	w.processedFiles = make(map[string]bool)
 	return w
 }
 
@@ -80,22 +82,34 @@ func (fw *FileWatcher) watchEvents() {
 		select {
 		case ev := <-fw.watch.Events:
 			{
-				if ev.Op&fsnotify.Create == fsnotify.Create {
+				logrus.Infof("received fsnotify event: %s, op: %s", ev.Name, ev.Op.String())
+				// Handle CREATE or WRITE events for new files
+				if ev.Op&fsnotify.Create == fsnotify.Create || ev.Op&fsnotify.Write == fsnotify.Write {
 					file, err := os.Stat(ev.Name)
 					if err != nil {
-						logrus.Errorf("received a create event from fsnotify,but os.stat error:%s", err.Error())
+						logrus.Errorf("received a create/write event from fsnotify,but os.stat error:%s", err.Error())
 					} else {
 						if file.IsDir() {
-							fw.watch.Add(ev.Name)
-							logrus.Infof("new subdir created,start to watch it:%s", ev.Name)
+							if ev.Op&fsnotify.Create == fsnotify.Create {
+								fw.watch.Add(ev.Name)
+								logrus.Infof("new subdir created,start to watch it:%s", ev.Name)
+							}
 						} else {
+							// Check if we've already processed this file
+							if fw.processedFiles[ev.Name] {
+								logrus.Debugf("file %s already processed, skipping", ev.Name)
+								continue
+							}
 							_, err = isFileWriteComplete(ev.Name)
 							if err != nil {
-								logrus.Errorf("file write")
+								logrus.Errorf("file write incomplete or error: %v", err)
+							} else {
+								logrus.Infof("capture a file:%s", ev.Name)
+								// Mark as processed
+								fw.processedFiles[ev.Name] = true
+								// send file to receiver channel
+								fw.receiver <- ev.Name
 							}
-							logrus.Infof("capture a file:%s", ev.Name)
-							// send file to receiver channel
-							fw.receiver <- ev.Name
 						}
 					}
 				}
@@ -107,6 +121,9 @@ func (fw *FileWatcher) watchEvents() {
 					if err == nil && fi.IsDir() {
 						fw.watch.Remove(ev.Name)
 						logrus.Infof("subdir is removed, no more to watch:%s", ev.Name)
+					} else {
+						// Clean up processed files map for removed files
+						delete(fw.processedFiles, ev.Name)
 					}
 				}
 

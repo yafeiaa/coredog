@@ -6,3 +6,4 @@ metadata:
     {{- include "coredog.labels" . | nindent 4 }}
 data:
   coredog.yaml: {{ .Values.config.coredog | quote }}
+  watcher.yaml: {{ .Values.config.coredog | quote }}

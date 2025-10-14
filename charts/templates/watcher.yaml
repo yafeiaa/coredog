@@ -24,8 +24,10 @@ spec:
           mountPath: /etc/config
         - name: {{ .Values.corefileVolume.name }}
           mountPath: /corefile
-        args: ["./coredog","watcher"]
+        args: ["watcher"]
         env:
+        - name: CONFIG_PATH
+          value: "/etc/config/coredog.yaml"
         - name: HOST_IP
           valueFrom:
             fieldRef:
