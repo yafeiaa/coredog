@@ -2,7 +2,8 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "coredog.fullname" . }}-webhook
+  name: coredog-webhook
+  namespace: coredog-system
   labels:
     {{- include "coredog.labels" . | nindent 4 }}
     app.kubernetes.io/component: webhook
@@ -18,7 +19,7 @@ spec:
         {{- include "coredog.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: webhook
     spec:
-      serviceAccountName: {{ include "coredog.fullname" . }}
+      serviceAccountName: coredog
       containers:
       - name: webhook
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -56,9 +57,9 @@ spec:
       volumes:
       - name: config-volume
         configMap:
-          name: {{ include "coredog.fullname" . }}
+          name: coredog-config
       - name: webhook-certs
         secret:
-          secretName: {{ include "coredog.fullname" . }}-webhook-certs
+          secretName: coredog-webhook-certs
 {{- end }}
 

@@ -2,7 +2,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ include "coredog.fullname" . }}-reader
+  name: coredog-reader
 rules:
 - apiGroups: [""]
   resources: ["pods"]
@@ -11,14 +11,14 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "coredog.fullname" . }}-reader-binding
+  name: coredog-reader-binding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {{ include "coredog.fullname" . }}-reader
+  name: coredog-reader
 subjects:
 - kind: ServiceAccount
-  name: {{ include "coredog.fullname" . }}
-  namespace: {{ .Release.Namespace }}
+  name: coredog
+  namespace: coredog-system
 {{- end }}
 
