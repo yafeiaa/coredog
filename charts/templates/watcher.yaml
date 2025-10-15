@@ -1,7 +1,8 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: {{ include "coredog.fullname" . }}-watcher
+  name: coredog-watcher
+  namespace: coredog-system
   labels:
     {{- include "coredog.watcher.labels" . | nindent 4 }}
 spec:
@@ -13,7 +14,7 @@ spec:
       labels:
         {{- include "coredog.watcher.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "coredog.fullname" . }}
+      serviceAccountName: coredog
       # Keep chart minimal: advanced pod settings can be added when needed
       containers:
       - name: watcher
@@ -43,7 +44,7 @@ spec:
       volumes:
         - name: config-volume
           configMap:
-            name: {{ include "coredog.fullname" . }}
+            name: coredog-config
         - name: {{ .Values.corefileVolume.name }}
           hostPath:
             path: {{ .Values.corefileVolume.hostPath.path }}

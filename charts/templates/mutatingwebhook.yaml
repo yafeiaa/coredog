@@ -2,7 +2,7 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
-  name: {{ include "coredog.fullname" . }}
+  name: coredog-webhook-config
   labels:
     {{- include "coredog.labels" . | nindent 4 }}
 webhooks:
@@ -10,8 +10,8 @@ webhooks:
   admissionReviewVersions: ["v1", "v1beta1"]
   clientConfig:
     service:
-      name: {{ include "coredog.fullname" . }}-webhook
-      namespace: {{ .Release.Namespace }}
+      name: coredog-webhook
+      namespace: coredog-system
       path: "/mutate"
     caBundle: {{ .Files.Get "webhook-certs/tls.crt" | b64enc }}
   rules:
