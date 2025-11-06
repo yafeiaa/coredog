@@ -65,6 +65,10 @@ func (fw *FileWatcher) Watch(dir string) error {
 			if err != nil {
 				return err
 			}
+			// Set directory permissions to 777
+			if err := os.Chmod(path, 0777); err != nil {
+				logrus.Warnf("failed to set permissions for directory %s: %v", path, err)
+			}
 			err = fw.watch.Add(path)
 			if err != nil {
 				return err
@@ -91,6 +95,10 @@ func (fw *FileWatcher) watchEvents() {
 					} else {
 						if file.IsDir() {
 							if ev.Op&fsnotify.Create == fsnotify.Create {
+								// Set directory permissions to 777
+								if err := os.Chmod(ev.Name, 0777); err != nil {
+									logrus.Warnf("failed to set permissions for new directory %s: %v", ev.Name, err)
+								}
 								// 添加监听
 								fw.watch.Add(ev.Name)
 								logrus.Infof("new subdir created,start to watch it:%s", ev.Name)
@@ -101,6 +109,10 @@ func (fw *FileWatcher) watchEvents() {
 										return nil
 									}
 									if info.IsDir() && path != ev.Name {
+										// Set directory permissions to 777
+										if err := os.Chmod(path, 0777); err != nil {
+											logrus.Warnf("failed to set permissions for subdir %s: %v", path, err)
+										}
 										if err := fw.watch.Add(path); err != nil {
 											logrus.Errorf("failed to watch subdir %s: %v", path, err)
 										} else {
