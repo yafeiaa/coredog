@@ -23,6 +23,7 @@ type Config struct {
 		S3Region                  string `yaml:"s3Region"`
 		S3Bucket                  string `yaml:"S3Bucket"`
 		S3Endpoint                string `yaml:"S3Endpoint"`
+		CFSMountPath              string `yaml:"CFSMountPath"`
 		StoreDir                  string `yaml:"StoreDir"`
 		PresignedURLExpireSeconds int    `yaml:"PresignedURLExpireSeconds"`
 		DeleteLocalCorefile       bool   `yaml:"deleteLocalCorefile"`

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -85,4 +86,22 @@ func NewS3Store(region, akid, aksecret, bucket, endpoint, storedir string, presi
 	}
 	store.uploader = uploader
 	return store, nil
+}
+
+// NewStore creates a Store instance based on the protocol
+// protocol: "s3" for S3/COS, "cfs" for CFS
+func NewStore(protocol, region, akid, aksecret, bucket, endpoint, cfsMountPath, storedir string, presignExpire int) (Store, error) {
+	protocol = strings.ToLower(strings.TrimSpace(protocol))
+	if protocol == "" {
+		protocol = "s3"
+	}
+
+	switch protocol {
+	case "s3", "cos":
+		return NewS3Store(region, akid, aksecret, bucket, endpoint, storedir, presignExpire)
+	case "cfs":
+		return NewCFSStore(cfsMountPath, storedir)
+	default:
+		return nil, errors.Errorf("unsupported storage protocol: %s", protocol)
+	}
 }
