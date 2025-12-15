@@ -12,6 +12,7 @@ CoreDog 在应用崩溃时自动收集 core dump 文件，上传到对象存储�
 - 📦 自动上传到 S3/COS/OSS
 - 🧹 上传后自动清理本地文件
 - 🔔 企业微信/Slack 即时通知
+- 🔗 [可选] 自动上报到 CoreSight，触发自动分析
 
 ## 快速开始
 
@@ -108,6 +109,12 @@ config:
     NoticeChannel:
       - chan: wechat
         webhookurl: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"
+    
+    # [可选] CoreSight 集成 - 自动分析 core dump
+    # CoreSight:
+    #   enabled: true
+    #   apiUrl: "http://coresight-api:8000"
+    #   token: "your-agent-token"
 ```
 
 ### Annotations 配置
@@ -391,6 +398,7 @@ kubectl delete mutatingwebhookconfiguration coredog
 ## 文档
 
 - [故障排查指南](docs/troubleshooting.md)
+- [CoreSight 集成指南](CORESIGHT_INTEGRATION.md) - 可选：自动分析 core dump
 
 ## 许可证
 

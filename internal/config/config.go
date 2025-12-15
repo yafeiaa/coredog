@@ -39,6 +39,12 @@ type Config struct {
 	} `yaml:"NoticeChannel"`
 	MessageTemplate string            `yaml:"messageTemplate"`
 	MessageLabels   map[string]string `yaml:"messageLabels"`
+
+	// CoreSight integration configuration
+	CoreSight struct {
+		Enabled bool   `yaml:"enabled" env-default:"false"`
+		NatsURL string `yaml:"natsUrl" env:"CORESIGHT_NATS_URL"`
+	} `yaml:"CoreSight"`
 }
 
 func Get() *Config {
