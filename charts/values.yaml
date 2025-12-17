@@ -33,16 +33,16 @@ config:
       
       # ⚠️ 重要：本地文件清理配置
       DeleteLocalCorefile: true              # 上传成功后是否删除本地文件（强烈推荐设为 true，避免磁盘被占满）
-    
+
     # 高级清理配置（可选，通常无需修改）
     gc: false                                # 保持 false，由 DeleteLocalCorefile 控制
     gc_type: rm                              # 清理方式:
                                              #   rm - 删除文件（推荐，彻底清理）
                                              #   truncate - 清空文件内容但保留文件（用于特殊审计需求，可以作为发生过core dump的证据）
-    
+
     # Core dump 文件目录（容器内路径，无需修改）
     CorefileDir: /corefile
-    
+
     # ⚠️ 通知配置：Core dump 发生时的消息模板（支持 Markdown 格式）
     messageTemplate: |
       🚨 **应用崩溃告警**
@@ -51,10 +51,10 @@ config:
       🏷️  Pod: `{pod.name}`
       🖥️  Node: `{pod.node}`
       📥 下载: {corefile.url}
-    
+
     # 可选：自定义消息标签
     messageLabels: {}
-    
+
     # ⚠️ 通知渠道配置（至少配置一个以接收告警）
     NoticeChannel: []
     # 示例配置：
@@ -65,7 +65,7 @@ config:
     #   - chan: slack                        # Slack
     #     webhookurl: "https://hooks.slack.com/services/xxx"
     #     keyword: "production"
-    
+
     # [可选] CoreSight 集成配置 - 自动分析 core dump
     CoreSight:
       enabled: false                         # 是否启用 CoreSight 集成
@@ -81,7 +81,7 @@ config:
 # Watcher 配置 (无需修改)
 # ----------------------------------------------------------------------------
 watcher:
-  kubeLookup: true                           # 是否通过 K8s API 查询 Pod UID
+  kubeLookup: true # 是否通过 K8s API 查询 Pod UID
 
 # ----------------------------------------------------------------------------
 # Core dump Volume 配置 (无需修改，除非要更改存储路径)
@@ -90,17 +90,17 @@ corefileVolume:
   type: hostPath
   name: corefile
   hostPath:
-    path: /data/coredog-system/dumps                         # 宿主机存储路径
-    type: DirectoryOrCreate                  # 自动创建目录
+    path: /data/coredog-system/dumps # 宿主机存储路径
+    type: DirectoryOrCreate # 自动创建目录
 
 # ----------------------------------------------------------------------------
 # Webhook 配置
 # ----------------------------------------------------------------------------
 webhook:
-  enabled: true                              # 是否启用 webhook 自动注入
-  replicas: 2                                # Webhook 副本数（建议 >= 2 保证高可用）
-  failurePolicy: Ignore                      # Webhook 失败策略: Ignore (不阻塞) 或 Fail (阻塞 Pod 创建)
-  
+  enabled: true # 是否启用 webhook 自动注入
+  replicas: 2 # Webhook 副本数（建议 >= 2 保证高可用）
+  failurePolicy: Ignore # Webhook 失败策略: Ignore (不阻塞) 或 Fail (阻塞 Pod 创建)
+
   # Namespace 选择器：控制哪些 namespace 会被 webhook 处理（可选）
   # 如果不配置，则所有 namespace 都会被处理（但仍需 Pod 有 coredog.io/inject=true 注解）
   namespaceSelector: {}
@@ -110,7 +110,7 @@ webhook:
   #   - key: coredog.io/enabled
   #     operator: In
   #     values: ["true"]
-  
+
   # Webhook 资源配置（无需修改）
   resources:
     requests:
@@ -119,13 +119,12 @@ webhook:
     limits:
       cpu: 200m
       memory: 256Mi
-  
-  # 注意：Webhook 失败告警会自动复用 NoticeChannel 配置发送
 
+  # 注意：Webhook 失败告警会自动复用 NoticeChannel 配置发送
 # ============================================================================
 # 配置说明
 # ============================================================================
-# 
+#
 # 必填配置项（标记为 ⚠️）：
 #   1. StorageConfig.s3AccesskeyID - S3 访问密钥
 #   2. StorageConfig.s3SecretAccessKey - S3 私钥
