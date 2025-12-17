@@ -87,7 +87,7 @@ func Run() {
 	// 初始化 CoreSight reporter
 	var csReporter *reporter.Reporter
 	if wcfg.CoreSight.Enabled {
-		csReporter = reporter.NewReporter(wcfg.CoreSight.NatsURL)
+		csReporter = reporter.NewReporterWithToken(wcfg.CoreSight.NatsURL, wcfg.CoreSight.Token)
 		if csReporter != nil {
 			logrus.Infof("CoreSight integration enabled: %s", wcfg.CoreSight.NatsURL)
 		}
@@ -120,34 +120,34 @@ func Run() {
 			}
 		}
 
-	pod := podresolver.Resolve(corefilePath, strings.ToLower(strings.TrimSpace(os.Getenv("KUBE_LOOKUP"))) == "true")
-	notify(ccfg, corefilePath, url, pod)
+		pod := podresolver.Resolve(corefilePath, strings.ToLower(strings.TrimSpace(os.Getenv("KUBE_LOOKUP"))) == "true")
+		notify(ccfg, corefilePath, url, pod)
 
-	// 上报事件到 CoreSight
-	if csReporter != nil {
-		_, filename := filepath.Split(corefilePath)
-		data := &reporter.CoredumpUploadedData{
-			CoredumpID:     uint64(0), // 由 CoreSight 自动分配
-			FileURL:        url,
-			FileName:       filename,
-			ExecutablePath: pod.Name, // 使用 pod 名称作为可执行文件路径示例
-			FileSize:       0,        // 可根据需要从文件信息获取
-			Image:          os.Getenv("POD_IMAGE"),
-			Timestamp:      time.Now().UTC().Format(time.RFC3339),
-			PodName:        pod.Name,
-			PodNamespace:   pod.Namespace,
-			NodeName:       pod.Node,
-		}
+		// 上报事件到 CoreSight
+		if csReporter != nil {
+			_, filename := filepath.Split(corefilePath)
+			data := &reporter.CoredumpUploadedData{
+				CoredumpID:     uint64(0), // 由 CoreSight 自动分配
+				FileURL:        url,
+				FileName:       filename,
+				ExecutablePath: pod.Name, // 使用 pod 名称作为可执行文件路径示例
+				FileSize:       0,        // 可根据需要从文件信息获取
+				Image:          os.Getenv("POD_IMAGE"),
+				Timestamp:      time.Now().UTC().Format(time.RFC3339),
+				PodName:        pod.Name,
+				PodNamespace:   pod.Namespace,
+				NodeName:       pod.Node,
+			}
 
-		// 获取文件大小
-		if fi, err := os.Stat(corefilePath); err == nil {
-			data.FileSize = fi.Size()
-		}
+			// 获取文件大小
+			if fi, err := os.Stat(corefilePath); err == nil {
+				data.FileSize = fi.Size()
+			}
 
-		if err := csReporter.ReportCoredumpUploaded(context.Background(), data); err != nil {
-			logrus.Errorf("failed to report coredump to CoreSight: %v", err)
-			// 不中断流程，继续处理其他任务
+			if err := csReporter.ReportCoredumpUploaded(context.Background(), data); err != nil {
+				logrus.Errorf("failed to report coredump to CoreSight: %v", err)
+				// 不中断流程，继续处理其他任务
+			}
 		}
-	}
 	}
 }

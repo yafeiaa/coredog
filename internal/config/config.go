@@ -44,6 +44,7 @@ type Config struct {
 	CoreSight struct {
 		Enabled bool   `yaml:"enabled" env-default:"false"`
 		NatsURL string `yaml:"natsUrl" env:"CORESIGHT_NATS_URL"`
+		Token   string `yaml:"token" env:"CORESIGHT_TOKEN"`
 	} `yaml:"CoreSight"`
 }
 

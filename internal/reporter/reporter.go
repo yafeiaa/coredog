@@ -19,6 +19,7 @@ type CloudEvent struct {
 	ID              string                 `json:"id"`
 	Time            string                 `json:"time"`
 	DataContentType string                 `json:"datacontenttype"`
+	Token           string                 `json:"token,omitempty"`
 	Data            map[string]interface{} `json:"data"`
 }
 
@@ -40,10 +41,16 @@ type CoredumpUploadedData struct {
 // Reporter 负责向 CoreSight 上报事件（通过 NATS）
 type Reporter struct {
 	natsConn *nats.Conn
+	token    string
 }
 
 // NewReporter 创建新的 reporter（连接到 NATS）
 func NewReporter(natsURL string) *Reporter {
+	return NewReporterWithToken(natsURL, "")
+}
+
+// NewReporterWithToken 创建新的 reporter（连接到 NATS，并设置 token）
+func NewReporterWithToken(natsURL string, token string) *Reporter {
 	if natsURL == "" {
 		logrus.Warn("CoreSight NATS URL is not configured, event reporting disabled")
 		return nil
@@ -58,6 +65,7 @@ func NewReporter(natsURL string) *Reporter {
 	logrus.Infof("[CoreSight] Connected to NATS: %s", natsURL)
 	return &Reporter{
 		natsConn: nc,
+		token:    token,
 	}
 }
 
@@ -87,6 +95,7 @@ func (r *Reporter) ReportCoredumpUploaded(ctx context.Context, data *CoredumpUpl
 		ID:              eventID,
 		Time:            time.Now().UTC().Format(time.RFC3339),
 		DataContentType: "application/json",
+		Token:           r.token,
 		Data: map[string]interface{}{
 			"coredump_id":     data.CoredumpID,
 			"file_url":        data.FileURL,
