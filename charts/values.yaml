@@ -65,6 +65,17 @@ config:
     #   - chan: slack                        # Slack
     #     webhookurl: "https://hooks.slack.com/services/xxx"
     #     keyword: "production"
+    
+    # [可选] CoreSight 集成配置 - 自动分析 core dump
+    CoreSight:
+      enabled: false                         # 是否启用 CoreSight 集成
+      natsUrl: ""                            # CoreSight NATS 服务地址，如: nats://coresight-nats:4222
+      token: ""                              # CoreSight agent token（从 CoreSight 系统获取）
+    # 示例配置：
+    # CoreSight:
+    #   enabled: true
+    #   natsUrl: "nats://coresight-nats.default.svc.cluster.local:4222"
+    #   token: "your-agent-token-here"
 
 # ----------------------------------------------------------------------------
 # Watcher 配置 (无需修改)
@@ -124,6 +135,7 @@ webhook:
 #   6. NoticeChannel - 至少配置一个通知渠道
 #
 # 可选配置项：
+#   - CoreSight - 启用自动分析（需要 CoreSight 系统支持）
 #   - webhook.alert - Webhook 失败告警（推荐启用）
 #   - messageLabels - 自定义消息标签
 #   - keyword - 通知过滤关键词，不配置则不过滤
