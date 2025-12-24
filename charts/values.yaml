@@ -15,21 +15,28 @@ image:
 # ----------------------------------------------------------------------------
 config:
   coredog: |-
-    # S3 存储配置 - 用于上传 core dump 文件
+    # 存储配置 - 用于上传 core dump 文件
     StorageConfig:
       enabled: true                          # 是否启用云存储上传
-      protocol: s3                           # 存储协议，目前仅支持 s3
+      protocol: s3                           # 存储协议: s3, cos, cfs
+                                             #   - s3: Amazon S3 对象存储
+                                             #   - cos: 腾讯云 COS 对象存储（兼容 S3 API）
+                                             #   - cfs: 腾讯云 CFS 文件存储
       
+      # ===== S3/COS 配置（当 protocol=s3 或 protocol=cos 时使用）=====
       # ⚠️ 必填项：S3 访问凭证
-      s3AccesskeyID: ""                      # 填写您的 S3 Access Key ID
-      s3SecretAccessKey: ""                  # 填写您的 S3 Secret Access Key
-      s3Region: ""                           # 填写 S3 区域，如: us-east-1, ap-nanjing
-      S3Bucket: ""                           # 填写 S3 bucket 名称
-      S3Endpoint: ""                         # 填写 S3 endpoint，如: s3.amazonaws.com, cos.ap-nanjing.myqcloud.com
+      s3AccesskeyID: ""                      # 填写您的 S3/COS Access Key ID
+      s3SecretAccessKey: ""                  # 填写您的 S3/COS Secret Access Key
+      s3Region: ""                           # 填写 S3/COS 区域，如: us-east-1, ap-nanjing
+      S3Bucket: ""                           # 填写 S3/COS bucket 名称
+      S3Endpoint: ""                         # 填写 S3/COS endpoint，如: s3.amazonaws.com, cos.ap-nanjing.myqcloud.com
       
-      # 可选配置
-      StoreDir: corefiles                    # S3 中的存储目录前缀
-      PresignedURLExpireSeconds: 3600        # 预签名 URL 有效期（秒）
+      # ===== CFS 配置（当 protocol=cfs 时使用）=====
+      CFSMountPath: ""                       # CFS 挂载路径，如: /mnt/cfs
+      
+      # 通用配置
+      StoreDir: corefiles                    # 存储目录前缀
+      PresignedURLExpireSeconds: 3600        # 预签名 URL 有效期（秒，仅 S3/COS 使用）
       
       # ⚠️ 重要：本地文件清理配置
       DeleteLocalCorefile: true              # 上传成功后是否删除本地文件（强烈推荐设为 true，避免磁盘被占满）

@@ -87,6 +87,61 @@ spec:
 
 ## 配置说明
 
+### 存储方案选择
+
+CoreDog 支持三种存储后端：
+
+| 方案 | Protocol | 优点 | 适用场景 |
+|-----|----------|------|--------|
+| **S3** | `s3` | 标准 S3 API，兼容性强 | AWS 用户，通用场景 |
+| **COS** | `cos` | 腾讯云原生，性能优化 | 腾讯云环境 |
+| **CFS** | `cfs` | 文件存储，支持 POSIX 接口 | 需要文件系统语义，本地/专线上传 |
+
+#### S3 配置示例
+
+```yaml
+StorageConfig:
+  protocol: s3
+  s3AccesskeyID: "your_ak"
+  s3SecretAccessKey: "your_sk"
+  s3Region: "us-east-1"
+  S3Bucket: "my-bucket"
+  S3Endpoint: "s3.amazonaws.com"
+```
+
+#### COS 配置示例
+
+```yaml
+StorageConfig:
+  protocol: cos
+  s3AccesskeyID: "your_ak"
+  s3SecretAccessKey: "your_sk"
+  s3Region: "ap-nanjing"
+  S3Bucket: "my-bucket-1234567890"
+  S3Endpoint: "cos.ap-nanjing.myqcloud.com"
+```
+
+#### CFS 配置示例
+
+**前置条件**：CFS 已挂载到集群节点
+
+```yaml
+StorageConfig:
+  protocol: cfs
+  CFSMountPath: "/mnt/cfs"      # CFS 挂载路径
+  StoreDir: "corefiles"          # CFS 内的存储目录
+  DeleteLocalCorefile: true
+```
+
+**配置 Watcher Pod 的 volume 挂载**（在 Helm values 中）：
+
+```yaml
+corefileVolume:
+  type: hostPath
+  hostPath:
+    path: /mnt/cfs                # 与 CFSMountPath 一致
+```
+
 ### values.yaml 必填配置
 
 编辑 `charts/values.yaml`：
@@ -95,10 +150,23 @@ spec:
 config:
   coredog: |-
     StorageConfig:
-      # ⚠️ S3 配置（必填）
+      # 存储协议选择
+      protocol: s3                           # s3: S3/COS, cfs: CFS（默认 s3）
+      
+      # === 若使用 S3 或 COS 存储 ===
       s3AccesskeyID: "YOUR_ACCESS_KEY"
       s3SecretAccessKey: "YOUR_SECRET_KEY"
       s3Region: "ap-nanjing"
+      S3Bucket: "your-bucket"
+      S3Endpoint: "cos.ap-nanjing.myqcloud.com"  # COS 填这个，S3 填 S3 endpoint
+      
+      # === 若使用 CFS 存储 ===
+      CFSMountPath: "/mnt/cfs"               # CFS 挂载路径
+      
+      # 通用配置
+      StoreDir: corefiles                    # 存储目录
+      DeleteLocalCorefile: true              # 上传后删除本地文件
+```
       S3Bucket: "your-bucket"
       S3Endpoint: "cos.ap-nanjing.myqcloud.com"
       

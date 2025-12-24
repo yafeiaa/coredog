@@ -71,12 +71,14 @@ func Run() {
 	if err := w.Watch(wcfg.CorefileDir); err != nil {
 		logrus.Fatal(err)
 	}
-	storeClient, err := store.NewS3Store(
+	storeClient, err := store.NewStore(
+		wcfg.StorageConfig.Protocol,
 		wcfg.StorageConfig.S3Region,
 		wcfg.StorageConfig.S3AccessKeyID,
 		wcfg.StorageConfig.S3SecretAccessKey,
 		wcfg.StorageConfig.S3Bucket,
 		wcfg.StorageConfig.S3Endpoint,
+		wcfg.StorageConfig.CFSMountPath,
 		wcfg.StorageConfig.StoreDir,
 		wcfg.StorageConfig.PresignedURLExpireSeconds,
 	)
