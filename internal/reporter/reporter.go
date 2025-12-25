@@ -1,13 +1,14 @@
 package reporter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"github.com/sirupsen/logrus"
 )
 
@@ -38,49 +39,48 @@ type CoredumpUploadedData struct {
 	NodeName       string `json:"node_name,omitempty"`
 }
 
-// Reporter 负责向 CoreSight 上报事件（通过 NATS）
+// Reporter 负责向 CoreSight 上报事件（通过 HTTP API）
 type Reporter struct {
-	natsConn *nats.Conn
-	token    string
+	httpClient *http.Client
+	apiURL     string
+	token      string
 }
 
-// NewReporter 创建新的 reporter（连接到 NATS）
-func NewReporter(natsURL string) *Reporter {
-	return NewReporterWithToken(natsURL, "")
+// NewReporter 创建新的 reporter（使用 HTTP API）
+func NewReporter(apiURL string) *Reporter {
+	return NewReporterWithToken(apiURL, "")
 }
 
-// NewReporterWithToken 创建新的 reporter（连接到 NATS，并设置 token）
-func NewReporterWithToken(natsURL string, token string) *Reporter {
-	if natsURL == "" {
-		logrus.Warn("CoreSight NATS URL is not configured, event reporting disabled")
+// NewReporterWithToken 创建新的 reporter（使用 HTTP API，并设置 token）
+func NewReporterWithToken(apiURL string, token string) *Reporter {
+	if apiURL == "" {
+		logrus.Warn("CoreSight API URL is not configured, event reporting disabled")
 		return nil
 	}
 
-	nc, err := nats.Connect(natsURL)
-	if err != nil {
-		logrus.Warnf("Failed to connect to NATS at %s: %v", natsURL, err)
-		return nil
+	client := &http.Client{
+		Timeout: 30 * time.Second,
 	}
 
-	logrus.Infof("[CoreSight] Connected to NATS: %s", natsURL)
+	logrus.Infof("[CoreSight] Configured HTTP reporter: %s", apiURL)
 	return &Reporter{
-		natsConn: nc,
-		token:    token,
+		httpClient: client,
+		apiURL:     apiURL,
+		token:      token,
 	}
 }
 
 // Close 关闭 reporter 连接
 func (r *Reporter) Close() error {
-	if r != nil && r.natsConn != nil {
-		r.natsConn.Close()
-		logrus.Info("[CoreSight] Closed NATS connection")
+	if r != nil && r.httpClient != nil {
+		logrus.Info("[CoreSight] HTTP reporter closed")
 	}
 	return nil
 }
 
 // ReportCoredumpUploaded 上报 coredump 上传事件到 CoreSight
 func (r *Reporter) ReportCoredumpUploaded(ctx context.Context, data *CoredumpUploadedData) error {
-	if r == nil || r.natsConn == nil {
+	if r == nil || r.httpClient == nil {
 		return nil // 如果 reporter 未配置，则忽略
 	}
 
@@ -117,20 +117,35 @@ func (r *Reporter) ReportCoredumpUploaded(ctx context.Context, data *CoredumpUpl
 		return fmt.Errorf("failed to marshal event: %w", err)
 	}
 
-	// 发布到 NATS
-	if err := r.natsConn.Publish(event.Type, body); err != nil {
-		return fmt.Errorf("failed to publish event to NATS: %w", err)
+	// 创建 HTTP 请求
+	req, err := http.NewRequestWithContext(ctx, "POST", r.apiURL, bytes.NewBuffer(body))
+	if err != nil {
+		return fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 
-	// 刷新缓冲区，确保消息被发送
-	if err := r.natsConn.Flush(); err != nil {
-		return fmt.Errorf("failed to flush NATS connection: %w", err)
+	// 设置请求头
+	req.Header.Set("Content-Type", "application/json")
+	if r.token != "" {
+		req.Header.Set("Authorization", "Bearer "+r.token)
+	}
+
+	// 发送请求
+	resp, err := r.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send HTTP request to %s: %w", r.apiURL, err)
+	}
+	defer resp.Body.Close()
+
+	// 检查响应状态
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("HTTP request failed with status %d: %s", resp.StatusCode, resp.Status)
 	}
 
 	logrus.Infof(
-		"[CoreSight] Successfully reported coredump uploaded event: %s (event_id: %s)",
+		"[CoreSight] Successfully reported coredump uploaded event: %s (event_id: %s, status: %d)",
 		data.FileURL,
 		eventID,
+		resp.StatusCode,
 	)
 
 	return nil
