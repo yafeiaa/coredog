@@ -185,6 +185,45 @@ config:
     #   token: "your-agent-token"
 ```
 
+### 自定义处理器配置
+
+CoreDog 支持在检测到 coredump 后执行自定义 shell 脚本，可选择性地替代默认的通知和 CoreSight 上报行为。
+
+```yaml
+CustomHandler:
+  enabled: true                    # 启用自定义处理器
+  timeout: 300                     # 脚本超时时间（秒）
+  skipDefaultNotify: true          # 跳过默认通知（企业微信/Slack）
+  skipCoreSight: true              # 跳过 CoreSight 上报
+  script: |
+    #!/bin/bash
+    # 发送到自定义 webhook
+    curl -X POST "https://your-api.com/coredump" \
+      -H "Content-Type: application/json" \
+      -d "{\"url\": \"$COREDUMP_URL\", \"pod\": \"$POD_NAMESPACE/$POD_NAME\"}"
+```
+
+**可用环境变量**：
+
+| 变量 | 说明 | 示例 |
+|-----|------|------|
+| `COREDUMP_FILE` | 本地文件路径 | `/corefile/core.bash.123` |
+| `COREDUMP_URL` | 上传后的 URL | `https://s3.xxx/corefiles/xxx` |
+| `COREDUMP_FILENAME` | 文件名 | `core.bash.123` |
+| `COREDUMP_MD5` | 文件 MD5 | `abc123...` |
+| `COREDUMP_SIZE` | 文件大小（字节） | `1234567` |
+| `COREDUMP_EXECUTABLE` | 可执行文件路径 | `/usr/bin/bash` |
+| `POD_NAME` | Pod 名称 | `my-app-xxx` |
+| `POD_NAMESPACE` | 命名空间 | `default` |
+| `POD_UID` | Pod UID | `abc-123-xxx` |
+| `POD_NODE_IP` | 节点 IP | `10.0.0.1` |
+| `POD_IMAGE` | 容器镜像 | `my-app:v1` |
+| `POD_CONTAINER` | 容器名称 | `app` |
+| `HOST_IP` | 宿主机 IP | `10.0.0.1` |
+
+> **注意**：部分 Pod 信息（如 `POD_IMAGE`、`POD_NODE_IP` 等）在某些情况下可能为空。
+> 脚本中建议使用 `[ -z "$POD_IMAGE" ]` 检查变量是否为空，或使用 `${POD_NAME:-unknown}` 提供默认值。
+
 ### Annotations 配置
 
 | Annotation | 必填 | 说明 | 示例 |
@@ -251,6 +290,36 @@ spec:
         ulimit -c unlimited
         cd /data/dumps  # 确保路径一致
         exec /app/server
+```
+
+### 场景 4: 自定义处理器 - 发送到自定义系统
+
+```yaml
+# values.yaml
+config:
+  coredog: |-
+    # ... 存储配置 ...
+    
+    # 启用自定义处理器，替代默认通知
+    CustomHandler:
+      enabled: true
+      skipDefaultNotify: true    # 不发送企业微信/Slack
+      skipCoreSight: false       # 仍然上报 CoreSight
+      timeout: 60
+      script: |
+        #!/bin/bash
+        # 发送到内部告警系统
+        curl -X POST "https://alert.internal.com/api/coredump" \
+          -H "Authorization: Bearer $ALERT_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"severity\": \"critical\",
+            \"source\": \"coredog\",
+            \"pod\": \"$POD_NAMESPACE/$POD_NAME\",
+            \"node\": \"$POD_NODE_IP\",
+            \"file_url\": \"$COREDUMP_URL\",
+            \"executable\": \"$COREDUMP_EXECUTABLE\"
+          }"
 ```
 
 ## 架构说明

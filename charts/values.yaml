@@ -72,6 +72,23 @@ config:
     #   - chan: slack                        # Slack
     #     webhookurl: "https://hooks.slack.com/services/xxx"
     #     keyword: "production"
+    
+    # [可选] 自定义处理器配置
+    # 启用后将执行自定义脚本，可选择性跳过默认通知和 CoreSight 上报
+    # CustomHandler:
+    #   enabled: true                        # 是否启用自定义处理器
+    #   timeout: 300                         # 脚本执行超时时间（秒）
+    #   skipDefaultNotify: true              # 是否跳过默认通知
+    #   skipCoreSight: true                  # 是否跳过 CoreSight 上报
+    #   script: |                            # 自定义 shell 脚本
+    #     #!/bin/bash
+    #     # 可用环境变量:
+    #     # COREDUMP_FILE, COREDUMP_URL, COREDUMP_FILENAME, COREDUMP_MD5, COREDUMP_SIZE, COREDUMP_EXECUTABLE
+    #     # POD_NAME, POD_NAMESPACE, POD_UID, POD_NODE_IP, POD_IMAGE, POD_CONTAINER, HOST_IP
+    #     # 注意: 部分 Pod 信息可能为空，建议使用默认值
+    #     curl -X POST "https://your-api.com/webhook" \
+    #       -H "Content-Type: application/json" \
+    #       -d "{\"file\": \"$COREDUMP_URL\", \"pod\": \"${POD_NAMESPACE:-unknown}/${POD_NAME:-unknown}\"}"
 
 # ----------------------------------------------------------------------------
 # Watcher 配置 (无需修改)

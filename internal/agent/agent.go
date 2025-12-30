@@ -9,6 +9,7 @@ import (
 
 	cfgpkg "github.com/DomineCore/coredog/internal/config"
 	"github.com/DomineCore/coredog/internal/coreparser"
+	"github.com/DomineCore/coredog/internal/handler"
 	"github.com/DomineCore/coredog/internal/notice"
 	"github.com/DomineCore/coredog/internal/podresolver"
 	"github.com/DomineCore/coredog/internal/reporter"
@@ -96,6 +97,14 @@ func Run() {
 		}
 	}
 
+	// 初始化自定义处理器
+	var customHandler *handler.CustomHandler
+	if wcfg.CustomHandler.Enabled {
+		customHandler = handler.NewCustomHandler(wcfg.CustomHandler.Script, wcfg.CustomHandler.Timeout)
+		logrus.Infof("CustomHandler enabled: skipDefaultNotify=%v, skipCoreSight=%v, timeout=%ds",
+			wcfg.CustomHandler.SkipDefaultNotify, wcfg.CustomHandler.SkipCoreSight, wcfg.CustomHandler.Timeout)
+	}
+
 	ccfg := wcfg
 	for corefilePath := range receiver {
 		// 解析 core 文件获取可执行文件路径（必须成功）
@@ -131,7 +140,48 @@ func Run() {
 		// enableLookup 默认为 true，除非明确设置为 false
 		enableLookup := strings.ToLower(strings.TrimSpace(os.Getenv("KUBE_LOOKUP"))) != "false"
 		pod := podresolver.Resolve(corefilePath, enableLookup)
-		notify(ccfg, corefilePath, url, pod)
+
+		// 判断是否跳过默认通知和 CoreSight 上报
+		skipNotify := false
+		skipCoreSight := false
+
+		// 执行自定义处理器
+		if customHandler != nil {
+			_, filename := filepath.Split(corefilePath)
+			coredumpInfo := handler.CoredumpInfo{
+				FilePath:       corefilePath,
+				FileURL:        url,
+				FileName:       filename,
+				MD5:            coreInfo.MD5,
+				FileSize:       coreInfo.FileSize,
+				ExecutablePath: coreInfo.ExecutablePath,
+			}
+			podInfo := handler.PodInfo{
+				Name:          pod.Name,
+				Namespace:     pod.Namespace,
+				UID:           pod.UID,
+				NodeIP:        pod.NodeIP,
+				Image:         pod.Image,
+				ContainerName: pod.ContainerName,
+				IsLegacyPath:  pod.IsLegacyPath,
+			}
+			if err := customHandler.Execute(context.Background(), coredumpInfo, podInfo); err != nil {
+				logrus.Errorf("custom handler execution failed: %v", err)
+			}
+
+			skipNotify = wcfg.CustomHandler.SkipDefaultNotify
+			skipCoreSight = wcfg.CustomHandler.SkipCoreSight
+		}
+
+		// 发送通知
+		if !skipNotify {
+			notify(ccfg, corefilePath, url, pod)
+		}
+
+		// 跳过 CoreSight 上报
+		if skipCoreSight {
+			continue
+		}
 
 		// 上报事件到 CoreSight
 		if csReporter != nil {

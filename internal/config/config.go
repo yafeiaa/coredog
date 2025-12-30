@@ -47,6 +47,15 @@ type Config struct {
 		NatsURL string `yaml:"natsUrl" env:"CORESIGHT_NATS_URL"`
 		Token   string `yaml:"token" env:"CORESIGHT_TOKEN"`
 	} `yaml:"CoreSight"`
+
+	// CustomHandler configuration for executing custom scripts
+	CustomHandler struct {
+		Enabled           bool   `yaml:"enabled" env-default:"false"`
+		Script            string `yaml:"script"`
+		Timeout           int    `yaml:"timeout" env-default:"300"`
+		SkipDefaultNotify bool   `yaml:"skipDefaultNotify" env-default:"true"`
+		SkipCoreSight     bool   `yaml:"skipCoreSight" env-default:"true"`
+	} `yaml:"CustomHandler"`
 }
 
 func Get() *Config {
