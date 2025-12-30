@@ -26,17 +26,16 @@ type CloudEvent struct {
 
 // CoredumpUploadedData 上传成功的 core dump 数据
 type CoredumpUploadedData struct {
-	CoredumpID     uint64 `json:"coredump_id"`
 	FileURL        string `json:"file_url"`
 	FileName       string `json:"file_name"`
 	ExecutablePath string `json:"executable_path"`
 	FileSize       int64  `json:"file_size"`
-	MD5            string `json:"md5,omitempty"`
-	Image          string `json:"image,omitempty"`
+	MD5            string `json:"md5"`
+	Image          string `json:"image"`
 	Timestamp      string `json:"timestamp"`
-	PodName        string `json:"pod_name,omitempty"`
-	PodNamespace   string `json:"pod_namespace,omitempty"`
-	NodeName       string `json:"node_name,omitempty"`
+	PodName        string `json:"pod_name"`
+	PodNamespace   string `json:"pod_namespace"`
+	NodeIP         string `json:"node_ip,omitempty"` // Pod 所在节点的 IP，从 status.hostIP 获取
 }
 
 // Reporter 负责向 CoreSight 上报事件（通过 HTTP API）
@@ -97,7 +96,6 @@ func (r *Reporter) ReportCoredumpUploaded(ctx context.Context, data *CoredumpUpl
 		DataContentType: "application/json",
 		Token:           r.token,
 		Data: map[string]interface{}{
-			"coredump_id":     data.CoredumpID,
 			"file_url":        data.FileURL,
 			"file_name":       data.FileName,
 			"executable_path": data.ExecutablePath,
@@ -107,7 +105,7 @@ func (r *Reporter) ReportCoredumpUploaded(ctx context.Context, data *CoredumpUpl
 			"timestamp":       data.Timestamp,
 			"pod_name":        data.PodName,
 			"pod_namespace":   data.PodNamespace,
-			"node_name":       data.NodeName,
+			"node_ip":         data.NodeIP,
 		},
 	}
 

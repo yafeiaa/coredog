@@ -8,6 +8,7 @@ import (
 	"time"
 
 	cfgpkg "github.com/DomineCore/coredog/internal/config"
+	"github.com/DomineCore/coredog/internal/coreparser"
 	"github.com/DomineCore/coredog/internal/notice"
 	"github.com/DomineCore/coredog/internal/podresolver"
 	"github.com/DomineCore/coredog/internal/reporter"
@@ -39,7 +40,7 @@ func buildNotifyMessage(cfg *cfgpkg.Config, corefilePath, url string, pod podres
 	msg = strings.ReplaceAll(msg, "{pod.name}", podName)
 	msg = strings.ReplaceAll(msg, "{pod.namespace}", pod.Namespace)
 	msg = strings.ReplaceAll(msg, "{pod.uid}", pod.UID)
-	msg = strings.ReplaceAll(msg, "{pod.node}", pod.Node)
+	msg = strings.ReplaceAll(msg, "{pod.node}", pod.NodeIP)
 	msg = strings.ReplaceAll(msg, "{host.ip}", getHostIP())
 	return msg
 }
@@ -97,6 +98,13 @@ func Run() {
 
 	ccfg := wcfg
 	for corefilePath := range receiver {
+		// 解析 core 文件获取可执行文件路径（必须成功）
+		coreInfo, err := coreparser.ParseCoreFile(corefilePath)
+		if err != nil {
+			logrus.Errorf("failed to parse core file %s: %v", corefilePath, err)
+			continue // file 命令失败，跳过此文件
+		}
+
 		url, err := storeClient.Upload(context.Background(), corefilePath)
 		if err != nil {
 			logrus.Errorf("store a corefile error:%v", err)
@@ -106,14 +114,12 @@ func Run() {
 		// 上传成功后，根据配置清理本地文件
 		if wcfg.StorageConfig.DeleteLocalCorefile {
 			if wcfg.Gc && wcfg.GcType == "truncate" {
-				// 如果明确配置了 truncate，则清空文件而不是删除
 				if err := os.Truncate(corefilePath, 0); err != nil {
 					logrus.Errorf("failed to truncate corefile %s: %v", corefilePath, err)
 				} else {
 					logrus.Infof("truncated local corefile: %s", corefilePath)
 				}
 			} else {
-				// 默认删除文件
 				if err := os.Remove(corefilePath); err != nil {
 					logrus.Errorf("failed to remove corefile %s: %v", corefilePath, err)
 				} else {
@@ -122,33 +128,69 @@ func Run() {
 			}
 		}
 
-		pod := podresolver.Resolve(corefilePath, strings.ToLower(strings.TrimSpace(os.Getenv("KUBE_LOOKUP"))) == "true")
+		// enableLookup 默认为 true，除非明确设置为 false
+		enableLookup := strings.ToLower(strings.TrimSpace(os.Getenv("KUBE_LOOKUP"))) != "false"
+		pod := podresolver.Resolve(corefilePath, enableLookup)
 		notify(ccfg, corefilePath, url, pod)
 
 		// 上报事件到 CoreSight
 		if csReporter != nil {
+			// 检查是否为旧路径格式，旧格式不上报到 CoreSight
+			if pod.IsLegacyPath {
+				logrus.Warnf("detected legacy path format for corefile: %s. Please upgrade to the new path structure: /data/coredog-system/dumps/<namespace>/<pod-name>/<container-name>/core.xxx. Skipping CoreSight reporting.", corefilePath)
+				continue
+			}
+
 			_, filename := filepath.Split(corefilePath)
+
+			// 验证必要字段，有异常则不上报
+			var validationErrors []string
+			if coreInfo.ExecutablePath == "" {
+				validationErrors = append(validationErrors, "executable_path is empty")
+			}
+			if coreInfo.MD5 == "" {
+				validationErrors = append(validationErrors, "md5 is empty")
+			}
+			if pod.Name == "" {
+				validationErrors = append(validationErrors, "pod_name is empty")
+			}
+			if strings.HasPrefix(pod.Name, "pod-") && len(pod.Name) == 12 {
+				// pod-xxxxxxxx 格式说明是从 admission-uid 生成的假名称
+				validationErrors = append(validationErrors, "pod_name is generated from admission-uid (pod not found)")
+			}
+			if pod.Namespace == "" {
+				validationErrors = append(validationErrors, "pod_namespace is empty")
+			}
+			if pod.Image == "" {
+				validationErrors = append(validationErrors, "image is empty")
+			}
+			if pod.NodeIP == "" {
+				validationErrors = append(validationErrors, "node_ip is empty")
+			}
+
+			if len(validationErrors) > 0 {
+				logrus.Errorf("skip reporting to CoreSight due to missing fields: %v, file=%s", validationErrors, corefilePath)
+				continue
+			}
+
 			data := &reporter.CoredumpUploadedData{
-				CoredumpID:     uint64(0), // 由 CoreSight 自动分配
 				FileURL:        url,
 				FileName:       filename,
-				ExecutablePath: pod.Name, // 使用 pod 名称作为可执行文件路径示例
-				FileSize:       0,        // 可根据需要从文件信息获取
-				Image:          os.Getenv("POD_IMAGE"),
+				ExecutablePath: coreInfo.ExecutablePath,
+				FileSize:       coreInfo.FileSize,
+				MD5:            coreInfo.MD5,
+				Image:          pod.Image,
 				Timestamp:      time.Now().UTC().Format(time.RFC3339),
 				PodName:        pod.Name,
 				PodNamespace:   pod.Namespace,
-				NodeName:       pod.Node,
-			}
-
-			// 获取文件大小
-			if fi, err := os.Stat(corefilePath); err == nil {
-				data.FileSize = fi.Size()
+				NodeIP:         pod.NodeIP,
 			}
 
 			if err := csReporter.ReportCoredumpUploaded(context.Background(), data); err != nil {
 				logrus.Errorf("failed to report coredump to CoreSight: %v", err)
-				// 不中断流程，继续处理其他任务
+			} else {
+				logrus.Infof("CoreSight event reported: executable=%s, size=%d, md5=%s",
+					coreInfo.ExecutablePath, coreInfo.FileSize, coreInfo.MD5)
 			}
 		}
 	}

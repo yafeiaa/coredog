@@ -242,45 +242,88 @@ func (h *MutateHandler) createPatch(pod *corev1.Pod, req *admissionv1.AdmissionR
 	// 获取要注入的容器列表
 	targetContainers := h.getTargetContainers(pod)
 
-	// 构建唯一标识符
-	// 问题：在 Webhook CREATE 阶段，pod.UID 是空的（由 API Server 稍后分配）
-	// 解决：使用 req.UID（AdmissionRequest 的 UID），它是唯一的
-	identifier := string(req.UID)
-
-	logrus.Infof("Using identifier for pod %s/%s: %s", req.Namespace, pod.Name, identifier)
-
-	// 构建 hostPath: /data/coredog-system/dumps/<namespace>/<admission-uid>/
-	hostPath := fmt.Sprintf("%s/%s/%s", h.PathBase, req.Namespace, identifier)
-
-	// 添加 annotation 存储 admission UID（用于后续通过路径反查 Pod）
-	patches = append(patches, map[string]interface{}{
-		"op":    "add",
-		"path":  "/metadata/annotations/coredog.io~1admission-uid",
-		"value": identifier,
-	})
-
-	// 检查是否已经存在该 volume
-	volumeExists := false
-	for _, vol := range pod.Spec.Volumes {
-		if vol.Name == h.VolumeName {
-			volumeExists = true
-			break
-		}
+	// 构建包含容器信息的路径结构
+	// 新方案：/data/coredog-system/dumps/<namespace>/<pod-name>/<container-name>/
+	// 这样 Agent 可以直接从路径知道容器信息，无需猜测
+	
+	// 使用 pod.Name，如果为空则使用 admission UID
+	podName := pod.Name
+	if podName == "" {
+		podName = "pod-" + string(req.UID)[:8]
 	}
 
-	// 添加 volume
-	if !volumeExists {
-		if len(pod.Spec.Volumes) == 0 {
-			// 如果 volumes 列表为空，创建新列表
-			patches = append(patches, map[string]interface{}{
-				"op":   "add",
-				"path": "/spec/volumes",
-				"value": []corev1.Volume{
-					{
-						Name: h.VolumeName,
+	logrus.Infof("Creating container-aware paths for pod %s/%s", req.Namespace, podName)
+
+	// 为每个目标容器创建独立的路径
+	// 基础路径：/data/coredog-system/dumps/<namespace>/<pod-name>/
+	basePath := fmt.Sprintf("%s/%s/%s", h.PathBase, req.Namespace, podName)
+
+	// 添加 Pod 和容器信息到 annotations（用于后续通过路径反查）
+	patches = append(patches, map[string]interface{}{
+		"op":    "add",
+		"path":  "/metadata/annotations/coredog.io~1pod-name",
+		"value": podName,
+	})
+	
+	// 记录目标容器列表
+	var containerNames []string
+	for containerName := range targetContainers {
+		containerNames = append(containerNames, containerName)
+	}
+	patches = append(patches, map[string]interface{}{
+		"op":    "add", 
+		"path":  "/metadata/annotations/coredog.io~1target-containers",
+		"value": strings.Join(containerNames, ","),
+	})
+
+	// 为每个目标容器创建独立的 volume 和 volumeMount
+	// 这样每个容器的 coredump 会存储在独立的目录中
+	volumeIndex := 0
+	for containerName := range targetContainers {
+		volumeName := fmt.Sprintf("%s-%s", h.VolumeName, containerName)
+		containerPath := fmt.Sprintf("%s/%s", basePath, containerName)
+		
+		// 检查是否已经存在该 volume
+		volumeExists := false
+		for _, vol := range pod.Spec.Volumes {
+			if vol.Name == volumeName {
+				volumeExists = true
+				break
+			}
+		}
+
+		// 添加容器专用的 volume
+		if !volumeExists {
+			if len(pod.Spec.Volumes) == 0 && volumeIndex == 0 {
+				// 如果 volumes 列表为空，创建新列表
+				patches = append(patches, map[string]interface{}{
+					"op":   "add",
+					"path": "/spec/volumes",
+					"value": []corev1.Volume{
+						{
+							Name: volumeName,
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: containerPath,
+									Type: func() *corev1.HostPathType {
+										t := corev1.HostPathDirectoryOrCreate
+										return &t
+									}(),
+								},
+							},
+						},
+					},
+				})
+			} else {
+				// 添加到现有列表
+				patches = append(patches, map[string]interface{}{
+					"op":   "add",
+					"path": "/spec/volumes/-",
+					"value": corev1.Volume{
+						Name: volumeName,
 						VolumeSource: corev1.VolumeSource{
 							HostPath: &corev1.HostPathVolumeSource{
-								Path: hostPath,
+								Path: containerPath,
 								Type: func() *corev1.HostPathType {
 									t := corev1.HostPathDirectoryOrCreate
 									return &t
@@ -288,30 +331,13 @@ func (h *MutateHandler) createPatch(pod *corev1.Pod, req *admissionv1.AdmissionR
 							},
 						},
 					},
-				},
-			})
-		} else {
-			// 添加到现有列表
-			patches = append(patches, map[string]interface{}{
-				"op":   "add",
-				"path": "/spec/volumes/-",
-				"value": corev1.Volume{
-					Name: h.VolumeName,
-					VolumeSource: corev1.VolumeSource{
-						HostPath: &corev1.HostPathVolumeSource{
-							Path: hostPath,
-							Type: func() *corev1.HostPathType {
-								t := corev1.HostPathDirectoryOrCreate
-								return &t
-							}(),
-						},
-					},
-				},
-			})
+				})
+			}
 		}
+		volumeIndex++
 	}
 
-	// 只为指定的容器添加 volumeMount
+	// 为每个容器添加对应的 volumeMount
 	for i := range pod.Spec.Containers {
 		containerName := pod.Spec.Containers[i].Name
 
@@ -320,9 +346,11 @@ func (h *MutateHandler) createPatch(pod *corev1.Pod, req *admissionv1.AdmissionR
 			continue
 		}
 
+		volumeName := fmt.Sprintf("%s-%s", h.VolumeName, containerName)
+		
 		mountExists := false
 		for _, mount := range pod.Spec.Containers[i].VolumeMounts {
-			if mount.Name == h.VolumeName {
+			if mount.Name == volumeName {
 				mountExists = true
 				break
 			}
@@ -335,7 +363,7 @@ func (h *MutateHandler) createPatch(pod *corev1.Pod, req *admissionv1.AdmissionR
 					"path": fmt.Sprintf("/spec/containers/%d/volumeMounts", i),
 					"value": []corev1.VolumeMount{
 						{
-							Name:      h.VolumeName,
+							Name:      volumeName,
 							MountPath: mountPath,
 						},
 					},
@@ -345,7 +373,7 @@ func (h *MutateHandler) createPatch(pod *corev1.Pod, req *admissionv1.AdmissionR
 					"op":   "add",
 					"path": fmt.Sprintf("/spec/containers/%d/volumeMounts/-", i),
 					"value": corev1.VolumeMount{
-						Name:      h.VolumeName,
+						Name:      volumeName,
 						MountPath: mountPath,
 					},
 				})
@@ -362,9 +390,11 @@ func (h *MutateHandler) createPatch(pod *corev1.Pod, req *admissionv1.AdmissionR
 			continue
 		}
 
+		volumeName := fmt.Sprintf("%s-%s", h.VolumeName, containerName)
+		
 		mountExists := false
 		for _, mount := range pod.Spec.InitContainers[i].VolumeMounts {
-			if mount.Name == h.VolumeName {
+			if mount.Name == volumeName {
 				mountExists = true
 				break
 			}
@@ -377,7 +407,7 @@ func (h *MutateHandler) createPatch(pod *corev1.Pod, req *admissionv1.AdmissionR
 					"path": fmt.Sprintf("/spec/initContainers/%d/volumeMounts", i),
 					"value": []corev1.VolumeMount{
 						{
-							Name:      h.VolumeName,
+							Name:      volumeName,
 							MountPath: mountPath,
 						},
 					},
@@ -387,7 +417,7 @@ func (h *MutateHandler) createPatch(pod *corev1.Pod, req *admissionv1.AdmissionR
 					"op":   "add",
 					"path": fmt.Sprintf("/spec/initContainers/%d/volumeMounts/-", i),
 					"value": corev1.VolumeMount{
-						Name:      h.VolumeName,
+						Name:      volumeName,
 						MountPath: mountPath,
 					},
 				})
