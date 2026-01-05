@@ -75,19 +75,25 @@ func Resolve(corefilePath string, enableLookup bool) PodInfo {
 }
 
 // resolveFromNewPathStructure 从新的路径结构解析 Pod 和容器信息
-// 路径格式：/data/coredog-system/dumps/<namespace>/<pod-name>/<container-name>/core.xxx
+// 路径格式：
+//   - 容器内：/corefile/<namespace>/<pod-name>/<container-name>/core.xxx
+//   - 宿主机：/data/coredog-system/dumps/<namespace>/<pod-name>/<container-name>/core.xxx
 func resolveFromNewPathStructure(corefilePath string) PodInfo {
 	// 标准化路径
 	cleanPath := filepath.Clean(corefilePath)
 	
-	// 查找 dumps 目录的位置
-	dumpsIndex := strings.Index(cleanPath, "/dumps/")
-	if dumpsIndex == -1 {
+	var relativePath string
+	
+	// 尝试匹配 /dumps/ 路径（宿主机路径）
+	if dumpsIndex := strings.Index(cleanPath, "/dumps/"); dumpsIndex != -1 {
+		relativePath = cleanPath[dumpsIndex+7:] // 跳过 "/dumps/"
+	} else if strings.HasPrefix(cleanPath, "/corefile/") {
+		// 匹配 /corefile/ 路径（容器内路径）
+		relativePath = cleanPath[10:] // 跳过 "/corefile/"
+	} else {
 		return PodInfo{}
 	}
 	
-	// 提取 dumps 后面的路径部分
-	relativePath := cleanPath[dumpsIndex+7:] // 跳过 "/dumps/"
 	parts := strings.Split(relativePath, "/")
 	
 	// 需要至少 3 个部分：namespace/pod-name/container-name

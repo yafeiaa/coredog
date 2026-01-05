@@ -119,6 +119,7 @@ func Run() {
 			logrus.Errorf("store a corefile error:%v", err)
 			continue
 		}
+		logrus.Debugf("uploaded corefile to: %s, original path: %s", url, corefilePath)
 
 		// 上传成功后，根据配置清理本地文件
 		if wcfg.StorageConfig.DeleteLocalCorefile {
@@ -139,6 +140,7 @@ func Run() {
 
 		// enableLookup 默认为 true，除非明确设置为 false
 		enableLookup := strings.ToLower(strings.TrimSpace(os.Getenv("KUBE_LOOKUP"))) != "false"
+		logrus.Debugf("resolving pod info from path: %s", corefilePath)
 		pod := podresolver.Resolve(corefilePath, enableLookup)
 
 		// 判断是否跳过默认通知和 CoreSight 上报
