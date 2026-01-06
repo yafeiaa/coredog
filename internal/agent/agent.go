@@ -100,9 +100,14 @@ func Run() {
 	// 初始化自定义处理器
 	var customHandler *handler.CustomHandler
 	if wcfg.CustomHandler.Enabled {
-		customHandler = handler.NewCustomHandler(wcfg.CustomHandler.Script, wcfg.CustomHandler.Timeout)
+		// 设置默认超时时间
+		timeout := wcfg.CustomHandler.Timeout
+		if timeout == 0 {
+			timeout = 300 // 默认 5 分钟
+		}
+		customHandler = handler.NewCustomHandler(wcfg.CustomHandler.Script, timeout)
 		logrus.Infof("CustomHandler enabled: skipDefaultNotify=%v, skipCoreSight=%v, timeout=%ds",
-			wcfg.CustomHandler.SkipDefaultNotify, wcfg.CustomHandler.SkipCoreSight, wcfg.CustomHandler.Timeout)
+			wcfg.CustomHandler.SkipDefaultNotify, wcfg.CustomHandler.SkipCoreSight, timeout)
 	}
 
 	ccfg := wcfg

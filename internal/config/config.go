@@ -50,11 +50,11 @@ type Config struct {
 
 	// CustomHandler configuration for executing custom scripts
 	CustomHandler struct {
-		Enabled           bool   `yaml:"enabled" env-default:"false"`
+		Enabled           bool   `yaml:"enabled"`
 		Script            string `yaml:"script"`
-		Timeout           int    `yaml:"timeout" env-default:"300"`
-		SkipDefaultNotify bool   `yaml:"skipDefaultNotify" env-default:"true"`
-		SkipCoreSight     bool   `yaml:"skipCoreSight" env-default:"true"`
+		Timeout           int    `yaml:"timeout"`
+		SkipDefaultNotify bool   `yaml:"skipDefaultNotify"`
+		SkipCoreSight     bool   `yaml:"skipCoreSight"`
 	} `yaml:"CustomHandler"`
 }
 
