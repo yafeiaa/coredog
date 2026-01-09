@@ -112,11 +112,12 @@ func Run() {
 
 	ccfg := wcfg
 	for corefilePath := range receiver {
-		// 解析 core 文件获取可执行文件路径（必须成功）
+		// 解析 core 文件获取可执行文件路径
+		// 解析失败不影响通知发送，只影响 CoreSight 上报
 		coreInfo, err := coreparser.ParseCoreFile(corefilePath)
 		if err != nil {
-			logrus.Errorf("failed to parse core file %s: %v", corefilePath, err)
-			continue // file 命令失败，跳过此文件
+			logrus.Warnf("failed to parse core file %s: %v (will continue with notification but skip CoreSight reporting)", corefilePath, err)
+			coreInfo = nil // 设置为 nil 以标记解析失败
 		}
 
 		url, err := storeClient.Upload(context.Background(), corefilePath)
@@ -153,7 +154,7 @@ func Run() {
 		skipCoreSight := false
 
 		// 执行自定义处理器
-		if customHandler != nil {
+		if customHandler != nil && coreInfo != nil {
 			_, filename := filepath.Split(corefilePath)
 			coredumpInfo := handler.CoredumpInfo{
 				FilePath:       corefilePath,
@@ -180,7 +181,7 @@ func Run() {
 			skipCoreSight = wcfg.CustomHandler.SkipCoreSight
 		}
 
-		// 发送通知
+		// 发送通知（不依赖 coreInfo，即使解析失败也发送）
 		if !skipNotify {
 			notify(ccfg, corefilePath, url, pod)
 		}
@@ -190,8 +191,14 @@ func Run() {
 			continue
 		}
 
-		// 上报事件到 CoreSight
+		// 上报事件到 CoreSight（需要 coreInfo 有效）
 		if csReporter != nil {
+			// 如果 coreInfo 为 nil（解析失败），跳过 CoreSight 上报
+			if coreInfo == nil {
+				logrus.Warnf("skipping CoreSight reporting for %s due to parsing failure", corefilePath)
+				continue
+			}
+
 			// 检查是否为旧路径格式，旧格式不上报到 CoreSight
 			if pod.IsLegacyPath {
 				logrus.Warnf("detected legacy path format for corefile: %s. Please upgrade to the new path structure: /data/coredog-system/dumps/<namespace>/<pod-name>/<container-name>/core.xxx. Skipping CoreSight reporting.", corefilePath)

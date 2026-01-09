@@ -2,6 +2,7 @@ package coreparser
 
 import (
 	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -108,4 +109,97 @@ func TestGetProcessNameFromPath(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFileCommandOutputWithTooManyHeaders(t *testing.T) {
+	tests := []struct {
+		name           string
+		output         string
+		shouldFallback bool
+	}{
+		{
+			name:           "too_many_headers",
+			output:         "core.silo-server-0.dotnet.1.1767942737: ELF 64-bit LSB core file, x86-64, version 1 (SYSV), too many program headers (3293)",
+			shouldFallback: true,
+		},
+		{
+			name:           "normal_output",
+			output:         "core.bash.12345: from '/bin/bash'",
+			shouldFallback: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hasTooManyHeaders := regexp.MustCompile(`too many program headers`).MatchString(tt.output)
+			if hasTooManyHeaders != tt.shouldFallback {
+				t.Errorf("expected shouldFallback=%v, got hasTooManyHeaders=%v", tt.shouldFallback, hasTooManyHeaders)
+			}
+		})
+	}
+}
+
+func TestReadelfOutputParsing(t *testing.T) {
+	tests := []struct {
+		name         string
+		output       string
+		expectedPath string
+		shouldError  bool
+	}{
+		{
+			name:         "psargs_single_line",
+			output:       "CORE          NT_PRPSINFO\n    state: 0, sname: R\n    psargs: /usr/bin/dotnet /path/to/app.dll",
+			expectedPath: "/usr/bin/dotnet",
+		},
+		{
+			name:         "psargs_with_args",
+			output:       "CORE          NT_PRPSINFO\n    psargs: /opt/myapp/bin/myapp --config /etc/myapp.conf",
+			expectedPath: "/opt/myapp/bin/myapp",
+		},
+		{
+			name:         "psargs_multiple_spaces",
+			output:       "CORE          NT_PRPSINFO\n    psargs: /usr/bin/python3    /path/to/script.py",
+			expectedPath: "/usr/bin/python3",
+		},
+		{
+			name:        "no_psargs",
+			output:      "CORE          NT_PRPSINFO\n    state: 0, sname: R\n    fname: dotnet",
+			shouldError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path, err := extractExecutablePathFromReadelfOutput(tt.output)
+			if tt.shouldError {
+				if err == nil {
+					t.Errorf("expected error but got none, path=%s", path)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if path != tt.expectedPath {
+					t.Errorf("expected path %q, got %q", tt.expectedPath, path)
+				}
+			}
+		})
+	}
+}
+
+// extractExecutablePathFromReadelfOutput 从 readelf 输出中提取可执行文件路径（用于测试）
+func extractExecutablePathFromReadelfOutput(output string) (string, error) {
+	// 尝试匹配 psargs 行（包含完整命令行）
+	psargsRe := regexp.MustCompile(`psargs:\s+([^\n]+)`)
+	if matches := psargsRe.FindStringSubmatch(output); len(matches) >= 2 {
+		// psargs 可能包含参数，只取第一个部分（可执行文件路径）
+		psargsLine := strings.TrimSpace(matches[1])
+		// 移除可能的换行符和多余空格
+		psargsLine = regexp.MustCompile(`\s+`).ReplaceAllString(psargsLine, " ")
+		args := strings.Fields(psargsLine)
+		if len(args) > 0 {
+			return args[0], nil
+		}
+	}
+	return "", errNoPathFound
 }

@@ -19,6 +19,7 @@ RUN apk add --no-cache \
     strace \
     tcpdump \
     file \
+    binutils \
     ca-certificates \
     && rm -rf /var/cache/apk/*
 
