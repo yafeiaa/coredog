@@ -1,0 +1,14 @@
+apiVersion: v1
+entries:
+  coredog:
+  - apiVersion: v2
+    appVersion: v0.1.0
+    created: "2026-11-11T08:36:40.361225504Z"
+    description: A Helm chart for coredog
+    digest: adaf2a8df38dffd86866788f98b25246b90c7da103741e16650f9b85d4d24ad8
+    name: coredog
+    type: application
+    urls:
+    - https://yafeiaa.github.io/coredog/coredog-0.1.0.tgz
+    version: 0.1.0
+generated: "2026-11-11T08:36:40.360715271Z"
