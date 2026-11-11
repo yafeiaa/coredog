@@ -55,6 +55,14 @@ type Config struct {
 		Timeout           int    `yaml:"timeout"`
 		SkipDefaultNotify bool   `yaml:"skipDefaultNotify"`
 		SkipCoreSight     bool   `yaml:"skipCoreSight"`
+		// TriggerOnAllFiles controls which files trigger the custom script.
+		// false (default): only files successfully parsed as ELF core dumps
+		// (coreInfo != nil) trigger the script — the original behavior.
+		// true: every newly detected file triggers the script, including
+		// non-ELF files (e.g. application-level crash dumps such as sglang's
+		// crash_dump_*.pkl). For non-ELF files the handler still receives
+		// file path/size/MD5; ExecutablePath stays empty.
+		TriggerOnAllFiles bool `yaml:"triggerOnAllFiles"`
 	} `yaml:"CustomHandler"`
 }
 

@@ -86,6 +86,12 @@ func calculateMD5(filePath string) (string, error) {
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
 
+// CalculateMD5 导出 MD5 计算能力，供非 core 文件场景复用
+// （例如 CustomHandler.TriggerOnAllFiles=true 时对任意文件补充 MD5）。
+func CalculateMD5(filePath string) (string, error) {
+	return calculateMD5(filePath)
+}
+
 // parseWithFileCommand 使用 file 命令获取 core 文件信息
 // 如果 file 命令因为程序头过多而失败，会尝试使用 readelf 作为备选方案
 func parseWithFileCommand(corefilePath string, info *CoreInfo) error {

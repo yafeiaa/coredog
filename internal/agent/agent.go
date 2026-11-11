@@ -65,6 +65,33 @@ func notify(cfg *cfgpkg.Config, corefilePath, url string, pod podresolver.PodInf
 	}
 }
 
+// buildCoredumpInfo 组装 CustomHandler 的文件上下文。
+// coreInfo 为 nil（非 ELF 文件或 core 解析失败）时，仍然填充文件大小并尽力计算 MD5，
+// 使 TriggerOnAllFiles=true 时脚本对任意文件都能拿到基本上下文；ExecutablePath 保持为空。
+func buildCoredumpInfo(corefilePath, url string, coreInfo *coreparser.CoreInfo) handler.CoredumpInfo {
+	_, filename := filepath.Split(corefilePath)
+	info := handler.CoredumpInfo{
+		FilePath: corefilePath,
+		FileURL:  url,
+		FileName: filename,
+	}
+	if coreInfo != nil {
+		info.MD5 = coreInfo.MD5
+		info.FileSize = coreInfo.FileSize
+		info.ExecutablePath = coreInfo.ExecutablePath
+		return info
+	}
+	if fi, err := os.Stat(corefilePath); err == nil {
+		info.FileSize = fi.Size()
+	}
+	if md5sum, err := coreparser.CalculateMD5(corefilePath); err == nil {
+		info.MD5 = md5sum
+	} else {
+		logrus.Warnf("failed to calculate md5 for %s: %v", corefilePath, err)
+	}
+	return info
+}
+
 // Run starts the corefile watcher agent
 func Run() {
 	wcfg := cfgpkg.Get()
@@ -154,16 +181,10 @@ func Run() {
 		skipCoreSight := false
 
 		// 执行自定义处理器
-		if customHandler != nil && coreInfo != nil {
-			_, filename := filepath.Split(corefilePath)
-			coredumpInfo := handler.CoredumpInfo{
-				FilePath:       corefilePath,
-				FileURL:        url,
-				FileName:       filename,
-				MD5:            coreInfo.MD5,
-				FileSize:       coreInfo.FileSize,
-				ExecutablePath: coreInfo.ExecutablePath,
-			}
+		// 默认只在 core 文件解析成功（coreInfo != nil）时触发；
+		// CustomHandler.TriggerOnAllFiles=true 时任意新文件（含非 ELF 的应用层 dump）都触发。
+		if customHandler != nil && (coreInfo != nil || wcfg.CustomHandler.TriggerOnAllFiles) {
+			coredumpInfo := buildCoredumpInfo(corefilePath, url, coreInfo)
 			podInfo := handler.PodInfo{
 				Name:          pod.Name,
 				Namespace:     pod.Namespace,
