@@ -23,7 +23,9 @@ const (
 	CoredogAnnotationInject    = "coredog.io/inject"    // "true" 开启注入
 	CoredogAnnotationContainer = "coredog.io/container" // 指定容器名，多个用逗号分隔
 	CoredogAnnotationPath      = "coredog.io/path"      // core dump 路径，默认 /corefile
-	CoredogPathBase            = "/data/coredog-system/dumps"
+	// CoredogPathBase 是宿主机路径基座的默认值，可通过配置文件的
+	// CoredogPathBase 字段覆盖（内部配置键 CoredogPathBase）。
+	CoredogPathBase = "/data/coredog-system/dumps"
 )
 
 var (
@@ -45,10 +47,30 @@ type MutateHandler struct {
 	VolumeName string
 }
 
+// normalizePathBase 规范化配置的宿主机路径基座：
+// 去除首尾空白与尾部斜杠；空值（老配置无此字段）或 "/" 回退默认值，
+// 避免 hostPath 落到根目录。
+func normalizePathBase(base string) string {
+	b := strings.TrimSuffix(strings.TrimSpace(base), "/")
+	if b == "" {
+		return CoredogPathBase
+	}
+	return b
+}
+
 func NewMutateHandler() *MutateHandler {
+	// 宿主机路径基座可配置：配置文件 CoredogPathBase 字段，
+	// 留空（老配置文件无此字段）时使用默认常量，行为不变。
+	rawBase := cfgpkg.Get().CoredogPathBase
+	pathBase := normalizePathBase(rawBase)
+	if pathBase != CoredogPathBase {
+		logrus.Infof("Webhook host path base overridden by config: %s (raw: %q)", pathBase, rawBase)
+	}
+	logrus.Infof("Webhook PathBase: %s (dumps land at <base>/<namespace>/<pod>/<container>/)", pathBase)
+
 	return &MutateHandler{
 		Enabled:    true,
-		PathBase:   CoredogPathBase,
+		PathBase:   pathBase,
 		MountPath:  CorefileMountPath,
 		VolumeName: CorefileVolumeName,
 	}

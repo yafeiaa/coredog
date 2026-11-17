@@ -6,5 +6,18 @@ metadata:
   labels:
     {{- include "coredog.labels" . | nindent 4 }}
 data:
+  {{- /* 将宿主机路径基座注入配置：webhook 注入的 hostPath 必须与 watcher 挂载的
+         corefileVolume.hostPath.path 一致，否则 core dump 落在挂载点之外，
+         watcher 无法感知。这里从 corefileVolume.hostPath.path 自动派生，
+         保持单一事实来源，用户改一处即可。 */}}
+  {{- $pathBase := .Values.corefileVolume.hostPath.path | trimAll "/" | printf "/%s" }}
+  {{- /* 用户在 config.coredog 里手写了 CoredogPathBase 时以用户值为准，
+         不追加，避免 YAML 重复键。 */}}
+  {{- $pathBaseLine := printf "CoredogPathBase: %s" $pathBase }}
+  {{- if not (regexFind "(?m)^\\s*CoredogPathBase:" .Values.config.coredog) }}
+  coredog.yaml: {{ (printf "%s\n%s\n" .Values.config.coredog $pathBaseLine) | quote }}
+  watcher.yaml: {{ (printf "%s\n%s\n" .Values.config.coredog $pathBaseLine) | quote }}
+  {{- else }}
   coredog.yaml: {{ .Values.config.coredog | quote }}
   watcher.yaml: {{ .Values.config.coredog | quote }}
+  {{- end }}
