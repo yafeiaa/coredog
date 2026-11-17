@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/ilyakaznacheev/cleanenv"
@@ -31,6 +32,14 @@ type Config struct {
 	Gc          bool   `yaml:"gc" env-default:"false"`
 	GcType      string `yaml:"gc_type" env-default:"rm"`
 	CorefileDir string `yaml:"CorefileDir"`
+
+	// CoredogPathBase 是 webhook 注入的宿主机路径基座：
+	//   <CoredogPathBase>/<namespace>/<pod-name>/<container-name>/
+	// 留空时 webhook 使用默认值 /data/coredog-system/dumps（见 webhook 包常量）。
+	// ⚠️ 必须与 watcher DaemonSet 挂载的 corefileVolume.hostPath.path 一致，
+	//    否则 core dump 会落在挂载点之外，watcher 无法感知（chart 会自动注入保持一致）。
+	// ⚠️ 不要加 env-default 标签：cleanenv 会用它覆盖 YAML 显式值（见 commit 15a4583）。
+	CoredogPathBase string `yaml:"CoredogPathBase"`
 
 	// Notice configuration (merged from controller)
 	NoticeChannel []struct {
@@ -79,6 +88,9 @@ func Get() *Config {
 		if cfg.CorefileDir == "" {
 			cfg.CorefileDir = "/corefile"
 		}
+		// CoredogPathBase 留空时不兜底：webhook 侧使用包默认常量，
+		// 这样老配置文件（无此字段）行为不变。
+		cfg.CoredogPathBase = strings.TrimSpace(cfg.CoredogPathBase)
 	})
 	return cfg
 }
